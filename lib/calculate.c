@@ -1,3 +1,6 @@
+/* Copyright 2012 Dietrich Epp <depp@zdome.net> */
+#define LFR_IMPLEMENTATION 1
+
 #include "calculate.h"
 #include <math.h>
 
@@ -38,7 +41,7 @@ bessel_i0(double x)
     return y;
 }
 
-void
+LFR_PRIVATE void
 lfr_s16_calculate(short *LFR_RESTRICT data, int nsamp, int nfilt,
                   double offset, double cutoff, double beta)
 {
@@ -57,7 +60,7 @@ lfr_s16_calculate(short *LFR_RESTRICT data, int nsamp, int nfilt,
     }
 }
 
-void
+LFR_PRIVATE void
 lfr_f32_calculate(float *LFR_RESTRICT data, int nsamp, int nfilt,
                   double offset, double cutoff, double beta)
 {

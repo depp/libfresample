@@ -1,8 +1,10 @@
 /* Copyright 2012 Dietrich Epp <depp@zdome.net> */
+#define LFR_IMPLEMENTATION 1
+
 #include "s16.h"
 #include <math.h>
 
-struct lfr_s16 *
+LFR_PUBLIC struct lfr_s16 *
 lfr_s16_new_lowpass(
     double f_rate, double f_pass,
     double f_stop, double snr)

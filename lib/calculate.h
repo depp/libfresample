@@ -1,3 +1,4 @@
+/* Copyright 2012 Dietrich Epp <depp@zdome.net> */
 #include "fresample.h"
 
 /*
@@ -14,10 +15,10 @@
   beta: Kaiser beta parameter
 */
 
-void
+LFR_PRIVATE void
 lfr_s16_calculate(short *LFR_RESTRICT data, int nsamp, int nfilt,
                   double offset, double cutoff, double beta);
 
-void
+LFR_PRIVATE void
 lfr_f32_calculate(float *LFR_RESTRICT data, int nsamp, int nfilt,
                   double offset, double cutoff, double beta);

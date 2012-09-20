@@ -1,3 +1,6 @@
+/* Copyright 2012 Dietrich Epp <depp@zdome.net> */
+#define LFR_IMPLEMENTATION 1
+
 #include "calculate.h"
 #include "s16.h"
 #include <math.h>
@@ -9,7 +12,7 @@
   using 2^(N/2) filters, where N is the number of bits per sample, so
   8 is the maximum here.
 */
-struct lfr_s16 *
+LFR_PUBLIC struct lfr_s16 *
 lfr_s16_new_sinc(
     int nsamp, int log2nfilt, double cutoff, double beta)
 {

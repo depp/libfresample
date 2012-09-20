@@ -7,6 +7,10 @@ extern "C" {
 #endif
 
 #define LFR_RESTRICT
+#define LFR_PRIVATE
+#if defined(LFR_IMPLEMENTATION)
+# define LFR_PUBLIC
+#endif
 
 #if defined(_MSC_VER)
 # undef LFR_RESTRICT
@@ -16,6 +20,18 @@ extern "C" {
 #if defined(__GNUC__)
 # undef LFR_RESTRICT
 # define LFR_RESTRICT __restrict
+# undef LFR_PRIVATE
+# undef LFR_PUBLIC
+# if defined(LFR_IMPLEMENTATION)
+#  define LFR_PRIVATE __attribute__((visibility("internal")))
+#  if defined(__ELF__)
+#   define LFR_PUBLIC __attribute__((visibility("protected")))
+#  else
+#   define LFR_PUBLIC __attribute__((visibility("hidden")))
+#  endif
+# else
+#  define LFR_PUBLIC
+# endif
 #endif
 
 #if defined(__STDC_VERSION__)
@@ -43,7 +59,7 @@ struct lfr_s16;
 /*
   Free a low-pass filter.
 */
-void
+LFR_PUBLIC void
 lfr_s16_free(struct lfr_s16 *fp);
 
 /*
@@ -60,7 +76,7 @@ lfr_s16_free(struct lfr_s16 *fp);
 
   Returns NULL when out of memory.
 */
-struct lfr_s16 *
+LFR_PUBLIC struct lfr_s16 *
 lfr_s16_new_sinc(
     int nsamp, int log2nfilt, double cutoff, double beta);
 
@@ -76,7 +92,7 @@ lfr_s16_new_sinc(
 
   This function works by calling lfr_s16_new_sinc().
 */
-struct lfr_s16 *
+LFR_PUBLIC struct lfr_s16 *
 lfr_s16_new_lowpass(
     double f_rate, double f_pass,
     double f_stop, double snr);
@@ -110,7 +126,7 @@ lfr_s16_new_lowpass(
 
   This function works by calling lfr_s16_new_lowpass().
 */
-struct lfr_s16 *
+LFR_PUBLIC struct lfr_s16 *
 lfr_s16_new_resample(
     int f_inrate, int f_outrate,
     double snr, double transition, int loose);
@@ -126,14 +142,14 @@ lfr_s16_new_resample(
 
   This function works by calling lfr_s16_new_resample().
 */
-struct lfr_s16 *
+LFR_PUBLIC struct lfr_s16 *
 lfr_s16_new_preset(
     int f_inrate, int f_outrate, int quality);
 
 /*
   Resample 16-bit integer audio.
 */
-void
+LFR_PUBLIC void
 lfr_s16_resample_mono(
     short *LFR_RESTRICT out, size_t outlen, int outrate,
     const short *LFR_RESTRICT in, size_t inlen, int inrate,

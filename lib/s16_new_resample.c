@@ -1,6 +1,9 @@
+/* Copyright 2012 Dietrich Epp <depp@zdome.net> */
+#define LFR_IMPLEMENTATION 1
+
 #include "fresample.h"
 
-struct lfr_s16 *
+LFR_PUBLIC struct lfr_s16 *
 lfr_s16_new_resample(
     int f_inrate, int f_outrate,
     double snr, double transition, int loose)
