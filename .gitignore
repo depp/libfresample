@@ -2,6 +2,7 @@
 /build
 *.o
 *.a
+/fresample
 
 # Autotools
 /aclocal.m4

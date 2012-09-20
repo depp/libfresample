@@ -7,6 +7,8 @@ AC_CONFIG_FILES([Makefile])
 AC_PROG_CC
 AC_PROG_RANLIB
 
+AC_CHECK_LIB([m], [cos])
+
 AC_ARG_ENABLE(warnings,
   AS_HELP_STRING([--enable-warnings], [enable warnings for GCC]),
   [enable_warnings=$enableval], [enable_warnings=no])
