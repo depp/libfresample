@@ -9,6 +9,7 @@ libfresample_a_SOURCES = \
 	lib/calculate.h \
 	lib/calculate.c \
 	lib/s16.h \
+	lib/s16_free.c \
 	lib/s16_new_lowpass.c \
 	lib/s16_new_preset.c \
 	lib/s16_new_resample.c \

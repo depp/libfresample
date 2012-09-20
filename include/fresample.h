@@ -36,10 +36,15 @@ enum {
 };
 
 /*
-  A low-pass filter for resampling 16-bit integer audio.  Filters
-  should be freed with the C library's free() call.
+  A low-pass filter for resampling 16-bit integer audio.
 */
 struct lfr_s16;
+
+/*
+  Free a low-pass filter.
+*/
+void
+lfr_s16_free(struct lfr_s16 *fp);
 
 /*
   Create a new windowed sinc filter with the given parameters.
