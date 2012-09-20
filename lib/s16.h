@@ -13,7 +13,8 @@
 
   This means that filter N will be a copy of filter 0, except shifted
   to the right by one sample.  This extra filter makes the
-  interpolation code simpler.
+  interpolation code simpler.  Note that only the underlying low-pass
+  filter is shifted, not the window.
 */
 struct lfr_s16 {
     /*

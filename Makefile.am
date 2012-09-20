@@ -6,8 +6,13 @@ AM_CPPFLAGS = -Iinclude
 AM_CFLAGS = @CWARN@
 
 libfresample_a_SOURCES = \
+	lib/calculate.h \
+	lib/calculate.c \
 	lib/s16.h \
-	lib/s16_new_lowpass.c
+	lib/s16_new_lowpass.c \
+	lib/s16_new_preset.c \
+	lib/s16_new_resample.c \
+	lib/s16_new_sinc.c
 
 include_HEADERS = \
 	include/fresample.h
