@@ -42,3 +42,13 @@ audio_format_lookup(const char *name)
     }
     return -1;
 }
+
+static const unsigned char AUDIO_FORMAT_SIZE[AUDIO_NUMFMT] = {
+    1, 2, 2, 3, 3, 4, 4
+};
+
+size_t
+audio_format_size(afmt_t fmt)
+{
+    return AUDIO_FORMAT_SIZE[fmt];
+}

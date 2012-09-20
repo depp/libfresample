@@ -2,6 +2,7 @@
 #ifndef AUDIO_H
 #define AUDIO_H
 #include <stddef.h>
+#include <stdio.h>
 
 typedef enum {
     AUDIO_U8,
@@ -44,6 +45,10 @@ audio_format_name(afmt_t fmt);
 int
 audio_format_lookup(const char *name);
 
+/* Get the size of an audio format in bytes.  */
+size_t
+audio_format_size(afmt_t fmt);
+
 /* Parse an audio sample rate.  Returns -1 on failure.  */
 int
 audio_rate_parse(const char *rate);
@@ -61,6 +66,12 @@ audio_init(struct audio *a);
 void
 audio_destroy(struct audio *a);
 
+/* Allocate audio data with the given parameters.  The audio object
+   must be initialized.  */
+void
+audio_alloc(struct audio *a,
+            size_t nframe, afmt_t format, int nchan, int rate);
+
 /* Load raw PCM into an audio structure.  The audio structure will
    alias the raw data.  */
 void
@@ -75,5 +86,9 @@ audio_wav_check(const void *data, size_t length);
    probably alias the WAV data.  */
 void
 audio_wav_load(struct audio *a, const void *data, size_t length);
+
+/* Write a WAV file to disk.  */
+void
+audio_wav_save(FILE *fp, const struct audio *a);
 
 #endif

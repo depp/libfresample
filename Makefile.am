@@ -14,7 +14,8 @@ libfresample_a_SOURCES = \
 	lib/s16_new_lowpass.c \
 	lib/s16_new_preset.c \
 	lib/s16_new_resample.c \
-	lib/s16_new_sinc.c
+	lib/s16_new_sinc.c \
+	lib/s16_resample_mono.c
 
 include_HEADERS = \
 	include/fresample.h
@@ -27,6 +28,7 @@ fresample_SOURCES = \
 	src/audio_raw_load.c \
 	src/audio_wav_check.c \
 	src/audio_wav_load.c \
+	src/audio_wav_save.c \
 	src/common.c \
 	src/common.h \
 	src/file.c \
@@ -34,3 +36,5 @@ fresample_SOURCES = \
 	src/main.c \
 	src/riff.c \
 	src/riff.h
+
+fresample_LDADD = libfresample.a
