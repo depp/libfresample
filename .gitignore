@@ -1,0 +1,22 @@
+# Build directory and products
+/build
+*.o
+*.a
+
+# Autotools
+/aclocal.m4
+/autom4te.cache
+/config.h
+/config.h.in
+/config.log
+/config.mak
+/config.mak.in
+/config.status
+/configure
+/depcomp
+/install-sh
+/missing
+Makefile
+Makefile.in
+.deps
+.dirstamp
