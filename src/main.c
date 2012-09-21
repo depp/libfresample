@@ -56,8 +56,9 @@ main(int argc, char *argv[])
 
     if (ain.fmt != AUDIO_S16LE)
         error("unsupported format");
-    if (ain.nchan != 1)
-        error("unsupported number of channels (only mono supported)");
+    if (ain.nchan != 1 && ain.nchan != 2)
+        error("unsupported number of channels "
+              "(only mono and stereo supported)");
 
     len = (size_t) floor(
         (double) ain.nframe * (double) rate / (double) ain.rate + 0.5);
@@ -69,10 +70,17 @@ main(int argc, char *argv[])
 
     fp = lfr_s16_new_preset(ain.rate, aout.rate, 3);
 
-    lfr_s16_resample_mono(
-        aout.alloc, aout.nframe, aout.rate,
-        ain.data, ain.nframe, ain.rate,
-        fp);
+    if (ain.nchan == 1) {
+        lfr_s16_resample_mono(
+            aout.alloc, aout.nframe, aout.rate,
+            ain.data, ain.nframe, ain.rate,
+            fp);
+    } else {
+        lfr_s16_resample_stereo(
+            aout.alloc, aout.nframe, aout.rate,
+            ain.data, ain.nframe, ain.rate,
+            fp);
+    }
 
     file_destroy(&din);
     audio_destroy(&ain);

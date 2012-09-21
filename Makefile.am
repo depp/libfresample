@@ -15,7 +15,8 @@ libfresample_a_SOURCES = \
 	lib/s16_new_preset.c \
 	lib/s16_new_resample.c \
 	lib/s16_new_sinc.c \
-	lib/s16_resample_mono.c
+	lib/s16_resample_mono.c \
+	lib/s16_resample_stereo.c
 
 include_HEADERS = \
 	include/fresample.h

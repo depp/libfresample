@@ -147,10 +147,18 @@ lfr_s16_new_preset(
     int f_inrate, int f_outrate, int quality);
 
 /*
-  Resample 16-bit integer audio.
+  Resample 16-bit integer audio.  Lengths are measured in frames, not
+  samples.
 */
 LFR_PUBLIC void
 lfr_s16_resample_mono(
+    short *LFR_RESTRICT out, size_t outlen, int outrate,
+    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    const struct lfr_s16 *LFR_RESTRICT filter);
+
+  
+LFR_PUBLIC void
+lfr_s16_resample_stereo(
     short *LFR_RESTRICT out, size_t outlen, int outrate,
     const short *LFR_RESTRICT in, size_t inlen, int inrate,
     const struct lfr_s16 *LFR_RESTRICT filter);
