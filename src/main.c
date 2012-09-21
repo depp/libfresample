@@ -7,6 +7,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 
 #define AUDIO_MINRATE 8000
@@ -32,7 +33,7 @@ static const char USAGE[] =
 int
 main(int argc, char *argv[])
 {
-    long v;
+    long v, benchmark, bi;
     int rate, opt, quality, nfiles;
     size_t len;
     struct file_data din;
@@ -40,12 +41,23 @@ main(int argc, char *argv[])
     char frate[AUDIO_RATE_FMTLEN], fnchan[32], *e, *files[2];
     struct lfr_s16 *fp;
     FILE *file;
+    clock_t t0, t1;
 
+    benchmark = -1;
     nfiles = 0;
     rate = -1;
     quality = -1;
-    while ((opt = getopt(argc, argv, ":hq:r:v")) != -1) {
+    while ((opt = getopt(argc, argv, ":b:hq:r:v")) != -1) {
         switch (opt) {
+        case 'b':
+            benchmark = strtol(optarg, &e, 10);
+            if (!*optarg || *e || benchmark < 1) {
+                fprintf(stderr, "error: invalid benchmark count '%s'\n",
+                        optarg);
+                return 1;
+            }
+            break;
+
         case 'h':
             fputs(USAGE, stderr);
             return 1;
@@ -138,11 +150,41 @@ main(int argc, char *argv[])
                 aout.alloc, aout.nframe, aout.rate,
                 ain.data, ain.nframe, ain.rate,
                 fp);
+
+            if (benchmark > 0) {
+                t0 = clock();
+                for (bi = 0; bi < benchmark; ++bi) {
+                    lfr_s16_resample_mono(
+                        aout.alloc, aout.nframe, aout.rate,
+                        ain.data, ain.nframe, ain.rate,
+                        fp);
+                }
+                t1 = clock();
+            }
         } else {
             lfr_s16_resample_stereo(
                 aout.alloc, aout.nframe, aout.rate,
                 ain.data, ain.nframe, ain.rate,
                 fp);
+
+            if (benchmark > 0) {
+                t0 = clock();
+                for (bi = 0; bi < benchmark; ++bi) {
+                    lfr_s16_resample_stereo(
+                        aout.alloc, aout.nframe, aout.rate,
+                        ain.data, ain.nframe, ain.rate,
+                        fp);
+                }
+                t1 = clock();
+            }
+        }
+
+        if (benchmark > 0) {
+            printf("Average time: %g s\n"
+                   "Speed: %g\n",
+                   (t1 - t0) / ((double) CLOCKS_PER_SEC * benchmark),
+                   ((double) CLOCKS_PER_SEC * benchmark * ain.nframe) /
+                   ((double) (t1 - t0) * ain.rate));
         }
 
         file_destroy(&din);
