@@ -66,6 +66,10 @@ audio_init(struct audio *a);
 void
 audio_destroy(struct audio *a);
 
+/* Set the destination to alias the source.  */
+void
+audio_alias(struct audio *dest, const struct audio *src);
+
 /* Allocate audio data with the given parameters.  The audio object
    must be initialized.  */
 void

@@ -46,3 +46,19 @@ audio_alloc(struct audio *a,
     a->nchan = nchan;
     a->rate = rate;
 }
+
+void
+audio_alias(struct audio *dest, const struct audio *src)
+{
+    if (dest == src)
+        return;
+    if (dest->alloc) {
+        free(dest->alloc);
+        dest->alloc = NULL;
+    }
+    dest->data = src->data;
+    dest->nframe = src->nframe;
+    dest->fmt = src->fmt;
+    dest->nchan = src->nchan;
+    dest->rate = src->rate;
+}

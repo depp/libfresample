@@ -6,6 +6,8 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 #define AUDIO_MINRATE 8000
 #define AUDIO_MAXRATE 192000
@@ -21,29 +23,86 @@ nchan_format(char *buf, size_t buflen, int nchan)
         snprintf(buf, buflen, "%d channels", nchan);
 }
 
+static const char USAGE[] =
+    "usage:\n"
+    "  fresample [-r RATE] [-q QUALITY] IN OUT\n"
+    "  fresample -h\n"
+    "  fresample -v\n";
+
 int
 main(int argc, char *argv[])
 {
-    int rate;
+    long v;
+    int rate, opt, quality, nfiles;
     size_t len;
     struct file_data din;
     struct audio ain, aout;
-    char frate[AUDIO_RATE_FMTLEN], fnchan[32];
+    char frate[AUDIO_RATE_FMTLEN], fnchan[32], *e, *files[2];
     struct lfr_s16 *fp;
     FILE *file;
 
-    if (argc != 4) {
-        fputs("usage: fresample RATE IN OUT\n", stderr);
+    nfiles = 0;
+    rate = -1;
+    quality = -1;
+    while ((opt = getopt(argc, argv, ":hq:r:v")) != -1) {
+        switch (opt) {
+        case 'h':
+            fputs(USAGE, stderr);
+            return 1;
+
+        case 'q':
+            v = strtol(optarg, &e, 10);
+            if (!*optarg || *e) {
+                fprintf(stderr, "error: invalid quality '%s'\n", optarg);
+                return 1;
+            }
+            if (v > 3) v = 3;
+            else if (v < 0) v = 0;
+            quality = (int) v;
+            break;
+
+        case 'r':
+            rate = audio_rate_parse(optarg);
+            if (rate < 0) {
+                fprintf(stderr, "error: invalid sample rate '%s'\n", argv[1]);
+                return 1;
+            }
+            break;
+
+        case 'v':
+            fputs("FResample version 0.0\n", stdout);
+            break;
+
+        case ':':
+            fprintf(stderr, "error: option -%c requires an argument\n",
+                    optopt);
+            return 1;
+
+        default:
+        case '?':
+            fprintf(stderr, "error: unrecognized option -%c\n", optopt);
+            return 1;
+        }
+    }
+    for (; optind < argc; ++optind) {
+        if (nfiles >= 2) {
+            fputs("error: too many files specified\n", stderr);
+            return 1;
+        }
+        files[nfiles++] = argv[optind];
+    }
+    if (nfiles != 2) {
+        fputs(USAGE, stderr);
         return 1;
     }
-
-    rate = audio_rate_parse(argv[1]);
     if (rate < 0) {
-        fprintf(stderr, "error: invalid sample rate '%s'\n", argv[1]);
+        fputs("error: no rate specified\n", stderr);
         return 1;
     }
+    if (quality < 0)
+        quality = 3;
 
-    file_read(&din, argv[2]);
+    file_read(&din, files[0]);
 
     audio_init(&ain);
     audio_init(&aout);
@@ -60,37 +119,44 @@ main(int argc, char *argv[])
         error("unsupported number of channels "
               "(only mono and stereo supported)");
 
-    len = (size_t) floor(
-        (double) ain.nframe * (double) rate / (double) ain.rate + 0.5);
-
-    audio_rate_format(frate, sizeof(frate), rate);
-    printf("Output: %s, %s, %s, %zu samples\n",
-           audio_format_name(ain.fmt), frate, fnchan, len);
-    audio_alloc(&aout, len, ain.fmt, ain.nchan, rate);
-
-    fp = lfr_s16_new_preset(ain.rate, aout.rate, 3);
-
-    if (ain.nchan == 1) {
-        lfr_s16_resample_mono(
-            aout.alloc, aout.nframe, aout.rate,
-            ain.data, ain.nframe, ain.rate,
-            fp);
+    if (ain.rate == aout.rate) {
+        fputs("No rate conversion necessary\n", stdout);
+        audio_alias(&aout, &ain);
     } else {
-        lfr_s16_resample_stereo(
-            aout.alloc, aout.nframe, aout.rate,
-            ain.data, ain.nframe, ain.rate,
-            fp);
+        len = (size_t) floor(
+            (double) ain.nframe * (double) rate / (double) ain.rate + 0.5);
+
+        audio_rate_format(frate, sizeof(frate), rate);
+        printf("Output: %s, %s, %s, %zu samples\n",
+               audio_format_name(ain.fmt), frate, fnchan, len);
+        audio_alloc(&aout, len, ain.fmt, ain.nchan, rate);
+
+        fp = lfr_s16_new_preset(ain.rate, aout.rate, 3);
+
+        if (ain.nchan == 1) {
+            lfr_s16_resample_mono(
+                aout.alloc, aout.nframe, aout.rate,
+                ain.data, ain.nframe, ain.rate,
+                fp);
+        } else {
+            lfr_s16_resample_stereo(
+                aout.alloc, aout.nframe, aout.rate,
+                ain.data, ain.nframe, ain.rate,
+                fp);
+        }
+
+        file_destroy(&din);
+        audio_destroy(&ain);
     }
 
-    file_destroy(&din);
-    audio_destroy(&ain);
-
-    file = fopen(argv[3], "wb");
+    file = fopen(files[1], "wb");
     if (!file)
         error("error opening output file");
     audio_wav_save(file, &aout);
     fclose(file);
 
+    file_destroy(&din);
+    audio_destroy(&ain);
     audio_destroy(&aout);
 
     return 0;
