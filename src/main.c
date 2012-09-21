@@ -131,7 +131,7 @@ main(int argc, char *argv[])
                audio_format_name(ain.fmt), frate, fnchan, len);
         audio_alloc(&aout, len, ain.fmt, ain.nchan, rate);
 
-        fp = lfr_s16_new_preset(ain.rate, aout.rate, 3);
+        fp = lfr_s16_new_preset(ain.rate, aout.rate, quality);
 
         if (ain.nchan == 1) {
             lfr_s16_resample_mono(
