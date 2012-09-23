@@ -18,7 +18,7 @@ lfr_s16_resample_stereo(
 
     __m128i acc, acc0, acc1, fir0, fir1, fir_interp, dat0, dat1, dat2, mask;
     int fn, ff0, ff1, off0, off, fidx0, fidx1;
-    int accs0, accs1, i, f;
+    int accs0, accs1, i, f, t;
 
     /* firp: Pointer to beginning of filter coefficients, aligned.  */
     firp = (const __m128i *) filter->data;
@@ -79,7 +79,8 @@ lfr_s16_resample_stereo(
                 goto accumulate;
             accs0 = 0;
             accs1 = 0;
-            for (i = in0; i < fidx0 * 8 + off; ++i) {
+            t = (off > in0) ? off : in0;
+            for (i = t; i < fidx0 * 8 + off; ++i) {
                 f = (((const short *) firp)[(fn+0)*flen*8 + i - off] * ff0 +
                      ((const short *) firp)[(fn+1)*flen*8 + i - off] * ff1)
                     >> INTERP_BITS;
@@ -95,7 +96,8 @@ lfr_s16_resample_stereo(
                 goto accumulate;
             accs0 = 0;
             accs1 = 0;
-            for (i = fidx1 * 8 + off; i < in1; ++i) {
+            t = (off + flen*8 < in1) ? (off + flen*8) : in1;
+            for (i = fidx1 * 8 + off; i < t; ++i) {
                 f = (((const short *) firp)[(fn+0)*flen*8 + i - off] * ff0 +
                      ((const short *) firp)[(fn+1)*flen*8 + i - off] * ff1)
                     >> INTERP_BITS;
@@ -143,7 +145,7 @@ lfr_s16_resample_stereo(
             break;
 
         case 1:
-            dat2 = inp[(off >> 2) + fidx0];
+            dat2 = inp[(off >> 2) + fidx0*2];
             for (i = fidx0; i < fidx1; ++i) {
                 fir0 = firp[(fn+0)*flen + i];
                 fir1 = firp[(fn+1)*flen + i];
@@ -185,7 +187,7 @@ lfr_s16_resample_stereo(
             break;
 
         case 2:
-            dat2 = inp[(off >> 2) + fidx0];
+            dat2 = inp[(off >> 2) + fidx0*2];
             for (i = fidx0; i < fidx1; ++i) {
                 fir0 = firp[(fn+0)*flen + i];
                 fir1 = firp[(fn+1)*flen + i];
@@ -227,7 +229,7 @@ lfr_s16_resample_stereo(
             break;
 
         case 3:
-            dat2 = inp[(off >> 2) + fidx0];
+            dat2 = inp[(off >> 2) + fidx0*2];
             for (i = fidx0; i < fidx1; ++i) {
                 fir0 = firp[(fn+0)*flen + i];
                 fir1 = firp[(fn+1)*flen + i];
