@@ -4,7 +4,7 @@
 #include "s16.h"
 #include <math.h>
 
-LFR_PUBLIC struct lfr_s16 *
+struct lfr_s16 *
 lfr_s16_new_lowpass(
     double f_rate, double f_pass,
     double f_stop, double snr)

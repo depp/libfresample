@@ -12,7 +12,7 @@
   using 2^(N/2) filters, where N is the number of bits per sample, so
   8 is the maximum here.
 */
-LFR_PUBLIC struct lfr_s16 *
+struct lfr_s16 *
 lfr_s16_new_sinc(
     int nsamp, int log2nfilt, double cutoff, double beta)
 {

@@ -1,10 +1,12 @@
 /* Copyright 2012 Dietrich Epp <depp@zdome.net> */
+#define LFR_IMPLEMENTATION 1
+
 #include "s16.h"
 #include <stdint.h>
 #include <emmintrin.h>
 
-LFR_PUBLIC void
-lfr_s16_resample_stereo(
+void
+lfr_s16_resample_stereo_sse2(
     short *LFR_RESTRICT out, size_t outlen, int outrate,
     const short *LFR_RESTRICT in, size_t inlen, int inrate,
     const struct lfr_s16 *LFR_RESTRICT filter)

@@ -3,7 +3,7 @@
 
 #include "fresample.h"
 
-LFR_PUBLIC struct lfr_s16 *
+struct lfr_s16 *
 lfr_s16_new_resample(
     int f_inrate, int f_outrate,
     double snr, double transition, int loose)

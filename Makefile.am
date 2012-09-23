@@ -9,6 +9,8 @@ AM_CFLAGS = @CWARN@
 libfresample_a_SOURCES = \
 	lib/calculate.h \
 	lib/calculate.c \
+	lib/cpu.h \
+	lib/cpu.c \
 	lib/s16.h \
 	lib/s16_free.c \
 	lib/s16_new_lowpass.c \
@@ -16,7 +18,9 @@ libfresample_a_SOURCES = \
 	lib/s16_new_resample.c \
 	lib/s16_new_sinc.c \
 	lib/s16_resample_mono.c \
-	lib/s16_resample_stereo.c
+	lib/s16_resample_stereo.c \
+	lib/s16_resample_stereo_scalar.c \
+	lib/s16_resample_stereo_sse2.c
 
 include_HEADERS = \
 	include/fresample.h

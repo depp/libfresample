@@ -156,7 +156,6 @@ lfr_s16_resample_mono(
     const short *LFR_RESTRICT in, size_t inlen, int inrate,
     const struct lfr_s16 *LFR_RESTRICT filter);
 
-  
 LFR_PUBLIC void
 lfr_s16_resample_stereo(
     short *LFR_RESTRICT out, size_t outlen, int outrate,

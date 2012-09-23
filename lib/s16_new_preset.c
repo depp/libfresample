@@ -1,5 +1,6 @@
 /* Copyright 2012 Dietrich Epp <depp@zdome.net> */
 #define LFR_IMPLEMENTATION 1
+
 #include "fresample.h"
 
 struct lfr_quality {
@@ -15,7 +16,7 @@ static const struct lfr_quality LFR_QUALITY[4] = {
     { 96, 65536/24, 0 }  /* ultra */
 };
 
-LFR_PUBLIC struct lfr_s16 *
+struct lfr_s16 *
 lfr_s16_new_preset(
     int f_inrate, int f_outrate, int quality)
 {

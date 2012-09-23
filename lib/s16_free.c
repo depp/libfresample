@@ -4,7 +4,7 @@
 #include "fresample.h"
 #include <stdlib.h>
 
-LFR_PUBLIC void
+void
 lfr_s16_free(struct lfr_s16 *fp)
 {
     free(fp);

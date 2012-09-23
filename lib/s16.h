@@ -46,3 +46,15 @@ struct lfr_s16 {
    word.  We bring all implementations to the same accuracy in order
    to ensure that all implementations produce the same results.  */
 #define INTERP_BITS 14
+
+LFR_PRIVATE void
+lfr_s16_resample_stereo_scalar(
+    short *LFR_RESTRICT out, size_t outlen, int outrate,
+    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    const struct lfr_s16 *LFR_RESTRICT filter);
+
+LFR_PRIVATE void
+lfr_s16_resample_stereo_sse2(
+    short *LFR_RESTRICT out, size_t outlen, int outrate,
+    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    const struct lfr_s16 *LFR_RESTRICT filter);
