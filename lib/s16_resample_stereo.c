@@ -20,7 +20,7 @@ lfr_s16_resample_stereo(
         si, sf: delta position, integral and fractional */
     pi = 0;
     pf = 0;
-    tmp64 = (uint64_t) inrate << (b + 16);
+    tmp64 = (uint64_t) inrate << (b + INTERP_BITS);
     si = (int) (tmp64 / outrate);
     sf = (int) (tmp64 % outrate);
 
@@ -31,16 +31,16 @@ lfr_s16_resample_stereo(
         /* fn: filter number
            ff0: filter factor for filter fn
            ff1: filter factor for filter fn+1 */
-        fn = ((unsigned) pi >> 16) & ((1u << b) - 1);
-        ff1 = (unsigned) pi & ((1u << 16) - 1);
-        ff0 = (1u << 16) - ff1;
+        fn = ((unsigned) pi >> INTERP_BITS) & ((1u << b) - 1);
+        ff1 = (unsigned) pi & ((1u << INTERP_BITS) - 1);
+        ff0 = (1u << INTERP_BITS) - ff1;
         /* off: offset in input corresponding to first sample in filter */
-        off = (int) (pi >> (16 + b)) - flen / 2;
+        off = (int) (pi >> (INTERP_BITS + b)) - (flen >> 1);
         for (j = 0; j < flen; ++j) {
             if (j + off < 0 || j + off >= inlen)
                 continue;
             f = (fd[(fn+0) * flen + j] * ff0 +
-                 fd[(fn+1) * flen + j] * ff1) >> 16;
+                 fd[(fn+1) * flen + j] * ff1) >> INTERP_BITS;
             acc0 += in[(j + off)*2+0] * f;
             acc1 += in[(j + off)*2+1] * f;
         }

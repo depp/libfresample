@@ -39,3 +39,10 @@ struct lfr_s16 {
     */
     int log2nfilt;
 };
+
+/* Bits used for interpolating between two filters.  The scalar
+   implementation supports up to 16 bits, but the SIMD implementations
+   generally only support 14 so the values can fit in a signed 16-bit
+   word.  We bring all implementations to the same accuracy in order
+   to ensure that all implementations produce the same results.  */
+#define INTERP_BITS 14
