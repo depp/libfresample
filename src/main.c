@@ -187,6 +187,8 @@ main(int argc, char *argv[])
                    ((double) (t1 - t0) * ain.rate));
         }
 
+        lfr_s16_free(fp);
+
         file_destroy(&din);
         audio_destroy(&ain);
     }
