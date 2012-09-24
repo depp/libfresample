@@ -18,6 +18,8 @@ libfresample_a_SOURCES = \
 	lib/s16_new_resample.c \
 	lib/s16_new_sinc.c \
 	lib/s16_resample_mono.c \
+	lib/s16_resample_mono_scalar.c \
+	lib/s16_resample_mono_sse2.c \
 	lib/s16_resample_stereo.c \
 	lib/s16_resample_stereo_scalar.c \
 	lib/s16_resample_stereo_sse2.c

@@ -48,6 +48,18 @@ struct lfr_s16 {
 #define INTERP_BITS 14
 
 LFR_PRIVATE void
+lfr_s16_resample_mono_scalar(
+    short *LFR_RESTRICT out, size_t outlen, int outrate,
+    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    const struct lfr_s16 *LFR_RESTRICT filter);
+
+LFR_PRIVATE void
+lfr_s16_resample_mono_sse2(
+    short *LFR_RESTRICT out, size_t outlen, int outrate,
+    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    const struct lfr_s16 *LFR_RESTRICT filter);
+
+LFR_PRIVATE void
 lfr_s16_resample_stereo_scalar(
     short *LFR_RESTRICT out, size_t outlen, int outrate,
     const short *LFR_RESTRICT in, size_t inlen, int inrate,
