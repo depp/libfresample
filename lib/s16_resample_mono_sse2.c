@@ -181,20 +181,27 @@ lfr_s16_resample_mono_sse2(
         }
 
     accumulate:
-        if ((outidx & 1) == 0) {
+        switch (outidx & 7) {
+        case 0: case 2: case 4: case 6:
             acc0 = acc;
-        } else if ((outidx & 2) == 0) {
+            break;
+
+        case 1: case 5:
             acc1 = _mm_add_epi32(
                 _mm_unpacklo_epi32(acc0, acc),
                 _mm_unpackhi_epi32(acc0, acc));
-        } else if ((outidx & 4) == 0) {
+            break;
+
+        case 3:
             acc0 = _mm_add_epi32(
                 _mm_unpacklo_epi32(acc0, acc),
                 _mm_unpackhi_epi32(acc0, acc));
             acc2 = _mm_add_epi32(
                 _mm_unpacklo_epi64(acc1, acc0),
                 _mm_unpackhi_epi64(acc1, acc0));
-        } else {
+            break;
+
+        case 7:
             acc0 = _mm_add_epi32(
                 _mm_unpacklo_epi32(acc0, acc),
                 _mm_unpackhi_epi32(acc0, acc));
@@ -209,6 +216,7 @@ lfr_s16_resample_mono_sse2(
             else
                 lfr_storepartial0_epi16(acc, out0, outp);
             outp += 1;
+            break;
         }
 
         pf += sf;
@@ -224,20 +232,27 @@ lfr_s16_resample_mono_sse2(
     if ((outidx & 7) == 0)
         return;
     for (; ; ++outidx) {
-        if ((outidx & 1) == 0) {
+        switch (outidx & 7) {
+        case 0: case 2: case 4: case 6:
             acc0 = acc;
-        } else if ((outidx & 2) == 0) {
+            break;
+
+        case 1: case 5:
             acc1 = _mm_add_epi32(
                 _mm_unpacklo_epi32(acc0, acc),
                 _mm_unpackhi_epi32(acc0, acc));
-        } else if ((outidx & 4) == 0) {
+            break;
+
+        case 3:
             acc0 = _mm_add_epi32(
                 _mm_unpacklo_epi32(acc0, acc),
                 _mm_unpackhi_epi32(acc0, acc));
             acc2 = _mm_add_epi32(
                 _mm_unpacklo_epi64(acc1, acc0),
                 _mm_unpackhi_epi64(acc1, acc0));
-        } else {
+            break;
+
+        case 7:
             acc0 = _mm_add_epi32(
                 _mm_unpacklo_epi32(acc0, acc),
                 _mm_unpackhi_epi32(acc0, acc));
