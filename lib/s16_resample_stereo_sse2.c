@@ -5,6 +5,61 @@
 #include <stdint.h>
 #include <emmintrin.h>
 
+#define LOOP_LOADFIR \
+    fir0 = firp[(fn+0)*flen + i];                   \
+    fir1 = firp[(fn+1)*flen + i];                   \
+                                                    \
+    fir0 = _mm_packs_epi32(                         \
+        _mm_srai_epi32(                             \
+            _mm_madd_epi16(                         \
+            _mm_unpacklo_epi16(fir0, fir1),         \
+            fir_interp),                            \
+            INTERP_BITS),                           \
+        _mm_srai_epi32(                             \
+            _mm_madd_epi16(                         \
+                _mm_unpackhi_epi16(fir0, fir1),     \
+                fir_interp),                        \
+            INTERP_BITS));                          \
+                                                    \
+    fir1 = _mm_unpackhi_epi16(fir0, fir0);          \
+    fir0 = _mm_unpacklo_epi16(fir0, fir0)
+
+#define LOOP_ACCUM \
+    acc = _mm_add_epi32(                            \
+        acc,                                        \
+        _mm_add_epi32(                              \
+            _mm_madd_epi16(                         \
+                _mm_unpacklo_epi16(dat0, dat1),     \
+                _mm_unpacklo_epi16(fir0, fir1)),    \
+            _mm_madd_epi16(                         \
+                _mm_unpackhi_epi16(dat0, dat1),     \
+                _mm_unpackhi_epi16(fir0, fir1))))
+
+
+#define LOOP_ALIGN0 \
+    for (i = fidx0; i < fidx1; ++i) {       \
+        dat0 = inp[(off >> 2) + i*2 + 0];   \
+        dat1 = inp[(off >> 2) + i*2 + 1];   \
+        LOOP_LOADFIR;                       \
+        LOOP_ACCUM;                         \
+    }
+
+#define LOOP_ALIGN(n) \
+    dat2 = inp[(off >> 2) + fidx0*2];           \
+    for (i = fidx0; i < fidx1; ++i) {           \
+        dat0 = dat2;                            \
+        dat1 = inp[(off >> 2) + i*2 + 1];       \
+        dat2 = inp[(off >> 2) + i*2 + 2];       \
+        dat0 = _mm_or_si128(                    \
+            _mm_srli_si128(dat0, (n)*2),        \
+            _mm_slli_si128(dat1, 16-(n)*2));    \
+        dat1 = _mm_or_si128(                    \
+            _mm_srli_si128(dat1, (n)*2),        \
+            _mm_slli_si128(dat2, 16-(n)*2));    \
+        LOOP_LOADFIR;                           \
+        LOOP_ACCUM;                             \
+    }
+
 void
 lfr_s16_resample_stereo_sse2(
     short *LFR_RESTRICT out, size_t outlen, int outrate,
@@ -112,165 +167,10 @@ lfr_s16_resample_stereo_sse2(
         }
 
         switch (off & 3) {
-        case 0:
-            for (i = fidx0; i < fidx1; ++i) {
-                fir0 = firp[(fn+0)*flen + i];
-                fir1 = firp[(fn+1)*flen + i];
-                dat0 = inp[(off >> 2) + i*2 + 0];
-                dat1 = inp[(off >> 2) + i*2 + 1];
-
-                fir0 = _mm_packs_epi32(
-                    _mm_srai_epi32(
-                        _mm_madd_epi16(
-                            _mm_unpacklo_epi16(fir0, fir1),
-                            fir_interp),
-                        INTERP_BITS),
-                    _mm_srai_epi32(
-                        _mm_madd_epi16(
-                            _mm_unpackhi_epi16(fir0, fir1),
-                            fir_interp),
-                        INTERP_BITS));
-
-                fir1 = _mm_unpackhi_epi16(fir0, fir0);
-                fir0 = _mm_unpacklo_epi16(fir0, fir0);
-
-                acc = _mm_add_epi32(
-                    acc,
-                    _mm_add_epi32(
-                        _mm_madd_epi16(
-                            _mm_unpacklo_epi16(dat0, dat1),
-                            _mm_unpacklo_epi16(fir0, fir1)),
-                        _mm_madd_epi16(
-                            _mm_unpackhi_epi16(dat0, dat1),
-                            _mm_unpackhi_epi16(fir0, fir1))));
-            }
-            break;
-
-        case 1:
-            dat2 = inp[(off >> 2) + fidx0*2];
-            for (i = fidx0; i < fidx1; ++i) {
-                fir0 = firp[(fn+0)*flen + i];
-                fir1 = firp[(fn+1)*flen + i];
-                dat0 = dat2;
-                dat1 = inp[(off >> 2) + i*2 + 1];
-                dat2 = inp[(off >> 2) + i*2 + 2];
-                dat0 = _mm_or_si128(
-                    _mm_srli_si128(dat0, 4),
-                    _mm_slli_si128(dat1, 12));
-                dat1 = _mm_or_si128(
-                    _mm_srli_si128(dat1, 4),
-                    _mm_slli_si128(dat2, 12));
-
-                fir0 = _mm_packs_epi32(
-                    _mm_srai_epi32(
-                        _mm_madd_epi16(
-                            _mm_unpacklo_epi16(fir0, fir1),
-                            fir_interp),
-                        INTERP_BITS),
-                    _mm_srai_epi32(
-                        _mm_madd_epi16(
-                            _mm_unpackhi_epi16(fir0, fir1),
-                            fir_interp),
-                        INTERP_BITS));
-
-                fir1 = _mm_unpackhi_epi16(fir0, fir0);
-                fir0 = _mm_unpacklo_epi16(fir0, fir0);
-
-                acc = _mm_add_epi32(
-                    acc,
-                    _mm_add_epi32(
-                        _mm_madd_epi16(
-                            _mm_unpacklo_epi16(dat0, dat1),
-                            _mm_unpacklo_epi16(fir0, fir1)),
-                        _mm_madd_epi16(
-                            _mm_unpackhi_epi16(dat0, dat1),
-                            _mm_unpackhi_epi16(fir0, fir1))));
-            }
-            break;
-
-        case 2:
-            dat2 = inp[(off >> 2) + fidx0*2];
-            for (i = fidx0; i < fidx1; ++i) {
-                fir0 = firp[(fn+0)*flen + i];
-                fir1 = firp[(fn+1)*flen + i];
-                dat0 = dat2;
-                dat1 = inp[(off >> 2) + i*2 + 1];
-                dat2 = inp[(off >> 2) + i*2 + 2];
-                dat0 = _mm_or_si128(
-                    _mm_srli_si128(dat0, 8),
-                    _mm_slli_si128(dat1, 8));
-                dat1 = _mm_or_si128(
-                    _mm_srli_si128(dat1, 8),
-                    _mm_slli_si128(dat2, 8));
-
-                fir0 = _mm_packs_epi32(
-                    _mm_srai_epi32(
-                        _mm_madd_epi16(
-                            _mm_unpacklo_epi16(fir0, fir1),
-                            fir_interp),
-                        INTERP_BITS),
-                    _mm_srai_epi32(
-                        _mm_madd_epi16(
-                            _mm_unpackhi_epi16(fir0, fir1),
-                            fir_interp),
-                        INTERP_BITS));
-
-                fir1 = _mm_unpackhi_epi16(fir0, fir0);
-                fir0 = _mm_unpacklo_epi16(fir0, fir0);
-
-                acc = _mm_add_epi32(
-                    acc,
-                    _mm_add_epi32(
-                        _mm_madd_epi16(
-                            _mm_unpacklo_epi16(dat0, dat1),
-                            _mm_unpacklo_epi16(fir0, fir1)),
-                        _mm_madd_epi16(
-                            _mm_unpackhi_epi16(dat0, dat1),
-                            _mm_unpackhi_epi16(fir0, fir1))));
-            }
-            break;
-
-        case 3:
-            dat2 = inp[(off >> 2) + fidx0*2];
-            for (i = fidx0; i < fidx1; ++i) {
-                fir0 = firp[(fn+0)*flen + i];
-                fir1 = firp[(fn+1)*flen + i];
-                dat0 = dat2;
-                dat1 = inp[(off >> 2) + i*2 + 1];
-                dat2 = inp[(off >> 2) + i*2 + 2];
-                dat0 = _mm_or_si128(
-                    _mm_srli_si128(dat0, 12),
-                    _mm_slli_si128(dat1, 4));
-                dat1 = _mm_or_si128(
-                    _mm_srli_si128(dat1, 12),
-                    _mm_slli_si128(dat2, 4));
-
-                fir0 = _mm_packs_epi32(
-                    _mm_srai_epi32(
-                        _mm_madd_epi16(
-                            _mm_unpacklo_epi16(fir0, fir1),
-                            fir_interp),
-                        INTERP_BITS),
-                    _mm_srai_epi32(
-                        _mm_madd_epi16(
-                            _mm_unpackhi_epi16(fir0, fir1),
-                            fir_interp),
-                        INTERP_BITS));
-
-                fir1 = _mm_unpackhi_epi16(fir0, fir0);
-                fir0 = _mm_unpacklo_epi16(fir0, fir0);
-
-                acc = _mm_add_epi32(
-                    acc,
-                    _mm_add_epi32(
-                        _mm_madd_epi16(
-                            _mm_unpacklo_epi16(dat0, dat1),
-                            _mm_unpacklo_epi16(fir0, fir1)),
-                        _mm_madd_epi16(
-                            _mm_unpackhi_epi16(dat0, dat1),
-                            _mm_unpackhi_epi16(fir0, fir1))));
-            }
-            break;
+        case 0: LOOP_ALIGN0; break;
+        case 1: LOOP_ALIGN(2); break;
+        case 2: LOOP_ALIGN(4); break;
+        case 3: LOOP_ALIGN(6); break;
         }
 
     accumulate:
