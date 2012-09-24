@@ -7,8 +7,83 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
+
+struct cpu_feature {
+    char name[8];
+    unsigned flag;
+};
+
+static const struct cpu_feature CPU_FEATURES[] = {
+    { "all", LFR_CPU_ALL },
+    { "none", LFR_CPU_NONE },
+    { "mmx", LFR_CPU_MMX },
+    { "sse", LFR_CPU_SSE },
+    { "sse2", LFR_CPU_SSE2 },
+    { "sse3", LFR_CPU_SSE3 },
+    { "ssse3", LFR_CPU_SSSE3 },
+    { "sse4_1", LFR_CPU_SSE4_1 },
+    { "sse4_2", LFR_CPU_SSE4_2 },
+    { "", 0 }
+};
+
+static void
+cpu_features_set(const char *str)
+{
+    char tmp[8];
+    const char *p = str, *q;
+    size_t n, i;
+    int c;
+    unsigned flags = 0, has_feature;
+    while (1) {
+        q = strchr(p, ',');
+        n = q ? (size_t) (q - p) : strlen(p);
+        if (n > 7)
+            goto unknown;
+        if (!n)
+            goto next;
+        for (i = 0; i < n; ++i) {
+            c = p[i];
+            if (c >= 'A' && c <= 'Z')
+                c += 'a' - 'A';
+            tmp[i] = c;
+        }
+        for (; i < sizeof(tmp); ++i)
+            tmp[i] = '\0';
+        for (i = 0; CPU_FEATURES[i].name[0]; ++i) {
+            if (!memcmp(tmp, CPU_FEATURES[i].name, 8)) {
+                flags |= CPU_FEATURES[i].flag;
+                break;
+            }
+        }
+        if (!CPU_FEATURES[i].name[0]) {
+        unknown:
+            fprintf(stderr, "unknown CPU feature: %.*s\n", (int) n, tmp);
+        }
+    next:
+        p = p + n;
+        if (!*p)
+            break;
+        p++;
+    }
+    flags = lfr_setcpufeatures(flags);
+    has_feature = 0;
+    fputs("CPU features enabled: ", stderr);
+    for (i = 2; CPU_FEATURES[i].name[0]; ++i) {
+        if ((flags & CPU_FEATURES[i].flag) == 0)
+            continue;
+        if (has_feature)
+            fputs(", ", stderr);
+        fputs(CPU_FEATURES[i].name, stderr);
+        has_feature = 1;
+    }
+    if (!has_feature) {
+        fputs("none (scalar implementations only)", stderr);
+    }
+    fputc('\n', stderr);
+}
 
 #define AUDIO_MINRATE 8000
 #define AUDIO_MAXRATE 192000
@@ -47,7 +122,7 @@ main(int argc, char *argv[])
     nfiles = 0;
     rate = -1;
     quality = -1;
-    while ((opt = getopt(argc, argv, ":b:hq:r:v")) != -1) {
+    while ((opt = getopt(argc, argv, ":b:c:hq:r:v")) != -1) {
         switch (opt) {
         case 'b':
             benchmark = strtol(optarg, &e, 10);
@@ -56,6 +131,10 @@ main(int argc, char *argv[])
                         optarg);
                 return 1;
             }
+            break;
+
+        case 'c':
+            cpu_features_set(optarg);
             break;
 
         case 'h':
