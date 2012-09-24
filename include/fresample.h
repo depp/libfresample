@@ -42,6 +42,31 @@ extern "C" {
 #endif
 
 /*
+  CPU features to use or disable.
+*/
+enum {
+    LFR_CPU_MMX    = (1u << 0),
+    LFR_CPU_SSE    = (1u << 1),
+    LFR_CPU_SSE2   = (1u << 2),
+    LFR_CPU_SSE3   = (1u << 3),
+    LFR_CPU_SSSE3  = (1u << 4),
+    LFR_CPU_SSE4_1 = (1u << 5),
+    LFR_CPU_SSE4_2 = (1u << 6),
+
+    LFR_CPU_NONE = 0,
+    LFR_CPU_ALL = 0xffffffff
+};
+
+/*
+  Set which CPU features are allowed or disallowed.  This is primarily
+  used for comparing the performance and correctness of vector
+  implementations and scalar implementations.  It can also be used to
+  prohibit features that your CPU supports but which your OS does not.
+*/
+LFR_PUBLIC void
+lfr_setcpufeatures(unsigned flags);
+
+/*
   Names for filter quality presets.
 */
 enum {

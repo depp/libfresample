@@ -4,7 +4,37 @@
 #include "cpu.h"
 
 #if defined(CPU_HASFLAGS)
+
 unsigned lfr_cpuflags;
+
+struct lfr_cpu_flagmap { unsigned x; unsigned y; };
+
+static const struct lfr_cpu_flagmap LFR_CPU_FLAGS[] = {
+#if defined(CPU_X86)
+    { LFR_CPU_MMX, CPUF_MMX },
+    { LFR_CPU_SSE, CPUF_SSE },
+    { LFR_CPU_SSE2, CPUF_SSE2 },
+    { LFR_CPU_SSE3, CPUF_SSE3 },
+    { LFR_CPU_SSSE3, CPUF_SSSE3 },
+    { LFR_CPU_SSE4_1, CPUF_SSE4_1 },
+    { LFR_CPU_SSE4_2, CPUF_SSE4_2 }
+#else
+# error "should not get here"
+#endif
+};
+
+void
+lfr_setcpufeatures(unsigned flags)
+{
+    int i, n = sizeof(LFR_CPU_FLAGS) / sizeof(*LFR_CPU_FLAGS);
+    unsigned mask = 1;
+    for (i = 0; i < n; ++i) {
+        if (flags & LFR_CPU_FLAGS[i].x)
+            mask |= 1u << LFR_CPU_FLAGS[i].y;
+    }
+    lfr_cpuflags = lfr_getcpuflags() & mask;
+}
+
 #endif
 
 #if defined(CPU_X86)
