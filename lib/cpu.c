@@ -23,16 +23,22 @@ static const struct lfr_cpu_flagmap LFR_CPU_FLAGS[] = {
 #endif
 };
 
-void
+unsigned
 lfr_setcpufeatures(unsigned flags)
 {
     int i, n = sizeof(LFR_CPU_FLAGS) / sizeof(*LFR_CPU_FLAGS);
-    unsigned mask = 1;
+    unsigned mask = 1, cpuflags, result;
     for (i = 0; i < n; ++i) {
         if (flags & LFR_CPU_FLAGS[i].x)
             mask |= 1u << LFR_CPU_FLAGS[i].y;
     }
-    lfr_cpuflags = lfr_getcpuflags() & mask;
+    lfr_cpuflags = cpuflags = lfr_getcpuflags() & mask;
+    result = 0;
+    for (i = 0; i < n; ++i) {
+        if (cpuflags & (1u << LFR_CPU_FLAGS[i].y))
+            result |= LFR_CPU_FLAGS[i].x;
+    }
+    return result;
 }
 
 #endif

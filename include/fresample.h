@@ -62,8 +62,12 @@ enum {
   used for comparing the performance and correctness of vector
   implementations and scalar implementations.  It can also be used to
   prohibit features that your CPU supports but which your OS does not.
+
+  Returns the CPU flags actually enabled, which will be the
+  intersection of the set of allowed flags (the argument) with the set
+  of features that the current CPU actually supports.
 */
-LFR_PUBLIC void
+LFR_PUBLIC unsigned
 lfr_setcpufeatures(unsigned flags);
 
 /*
