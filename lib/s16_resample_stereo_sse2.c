@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <emmintrin.h>
 
+#define UNALIGNED_LOAD 1
+
 #define LOOP_LOADFIR \
     fir0 = firp[(fn+0)*flen + i];                   \
     fir1 = firp[(fn+1)*flen + i];                   \
@@ -60,6 +62,18 @@
         LOOP_ACCUM;                             \
     }
 
+#define LOOP_UNALIGNED \
+    for (i = fidx0; i < fidx1; ++i) {                   \
+        dat0 = _mm_loadu_si128(                         \
+            (const __m128i *)                           \
+            ((const short *) inp + off*2 + i*16));      \
+        dat1 = _mm_loadu_si128(                         \
+            (const __m128i *)                           \
+            ((const short *) inp + off*2 + i*16+8));    \
+        LOOP_LOADFIR;                                   \
+        LOOP_ACCUM;                                     \
+    }
+
 void
 lfr_s16_resample_stereo_sse2(
     short *LFR_RESTRICT out, size_t outlen, int outrate,
@@ -73,7 +87,10 @@ lfr_s16_resample_stereo_sse2(
     int pf, si, sf;
     uint64_t pi, tmp64;
 
-    __m128i acc, acc0, acc1, fir0, fir1, fir_interp, dat0, dat1, dat2, mask;
+    __m128i acc, acc0, acc1, fir0, fir1, fir_interp, dat0, dat1, mask;
+#if !UNALIGNED_LOAD
+    __m128i dat2;
+#endif
     int fn, ff0, ff1, off0, off, fidx0, fidx1;
     int accs0, accs1, i, f, t;
 
@@ -166,12 +183,16 @@ lfr_s16_resample_stereo_sse2(
             fidx1 = flen;
         }
 
+#if UNALIGNED_LOAD
+        LOOP_UNALIGNED;
+#else
         switch (off & 3) {
         case 0: LOOP_ALIGN0; break;
         case 1: LOOP_ALIGN(2); break;
         case 2: LOOP_ALIGN(4); break;
         case 3: LOOP_ALIGN(6); break;
         }
+#endif
 
     accumulate:
         if ((outidx & 1) == 0) {
