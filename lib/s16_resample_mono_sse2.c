@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <emmintrin.h>
 
+#define UNALIGNED_LOAD 1
+
 #define LOOP_LOADFIR \
     fir0 = firp[(fn+0)*flen + i];               \
     fir1 = firp[(fn+1)*flen + i];               \
@@ -38,6 +40,15 @@
         dat0 = _mm_or_si128(                    \
             _mm_srli_si128(dat0, (n)*2),        \
             _mm_slli_si128(dat1, 16-(n)*2));    \
+        LOOP_LOADFIR;                           \
+        LOOP_ACCUM;                             \
+    }
+
+#define LOOP_UNALIGNED \
+    for (i = fidx0; i < fidx1; ++i) {           \
+        dat0 = _mm_loadu_si128(                 \
+            (const __m128i *)                   \
+            ((const short *) inp + off + i*8)); \
         LOOP_LOADFIR;                           \
         LOOP_ACCUM;                             \
     }
@@ -81,7 +92,10 @@ lfr_s16_resample_mono_sse2(
     int pf, si, sf;
     uint64_t pi, tmp64;
 
-    __m128i acc, acc0, acc1, acc2, fir0, fir1, fir_interp, dat0, dat1;
+    __m128i acc, acc0, acc1, acc2, fir0, fir1, fir_interp, dat0;
+#if !UNALIGNED_LOAD
+    __m128i dat1;
+#endif
     int fn, ff0, ff1, off0, off, fidx0, fidx1;
     int accs, i, f, t;
 
@@ -169,6 +183,9 @@ lfr_s16_resample_mono_sse2(
             fidx1 = flen;
         }
 
+#if UNALIGNED_LOAD
+        LOOP_UNALIGNED;
+#else
         switch (off & 7) {
         case 0: LOOP_ALIGN0; break;
         case 1: LOOP_ALIGN(1); break;
@@ -179,6 +196,7 @@ lfr_s16_resample_mono_sse2(
         case 6: LOOP_ALIGN(6); break;
         case 7: LOOP_ALIGN(7); break;
         }
+#endif
 
     accumulate:
         switch (outidx & 7) {
