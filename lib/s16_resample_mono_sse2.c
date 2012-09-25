@@ -1,6 +1,9 @@
 /* Copyright 2012 Dietrich Epp <depp@zdome.net> */
 #define LFR_IMPLEMENTATION 1
 
+#include "cpu.h"
+#if defined(CPU_X86)
+
 #include "s16.h"
 #include <stdint.h>
 #include <emmintrin.h>
@@ -285,3 +288,5 @@ lfr_s16_resample_mono_sse2(
         }
     }
 }
+
+#endif
