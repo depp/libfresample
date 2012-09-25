@@ -41,6 +41,15 @@ lfr_setcpufeatures(unsigned flags)
     return result;
 }
 
+#else
+
+unsigned
+lfr_setcpufeatures(unsigned flags)
+{
+    (void) flags;
+    return 0;
+}
+
 #endif
 
 #if defined(CPU_X86)
