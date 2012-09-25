@@ -7,9 +7,9 @@ extern "C" {
 #endif
 
 #define LFR_RESTRICT
-#define LFR_PRIVATE
+#define LFR_PUBLIC
 #if defined(LFR_IMPLEMENTATION)
-# define LFR_PUBLIC
+# define LFR_PRIVATE
 #endif
 
 #if defined(_MSC_VER)
