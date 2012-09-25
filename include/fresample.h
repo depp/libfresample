@@ -23,11 +23,12 @@ extern "C" {
 # undef LFR_PRIVATE
 # undef LFR_PUBLIC
 # if defined(LFR_IMPLEMENTATION)
-#  define LFR_PRIVATE __attribute__((visibility("internal")))
 #  if defined(__ELF__)
+#   define LFR_PRIVATE __attribute__((visibility("internal")))
 #   define LFR_PUBLIC __attribute__((visibility("protected")))
 #  else
-#   define LFR_PUBLIC __attribute__((visibility("hidden")))
+#   define LFR_PRIVATE __attribute__((visibility("hidden")))
+#   define LFR_PUBLIC __attribute__((visibility("default")))
 #  endif
 # else
 #  define LFR_PUBLIC
