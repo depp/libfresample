@@ -97,10 +97,20 @@ unsigned
 lfr_getcpuflags(void)
 {
     unsigned a, b, c, d;
+#if defined(__i386__) && defined(__PIC__)
+    /* %ebx is used by PIC, so we can't clobber it */
+    __asm__(
+        "xchgl\t%%ebx, %1\n\t"
+        "cpuid\n\t"
+        "xchgl\t%%ebx, %1"
+        : "=a"(a), "=r"(b), "=c"(c), "=d"(d)
+        : "0"(1));
+#else
     __asm__(
         "cpuid"
         : "=a"(a), "=b"(b), "=c"(c), "=d"(d)
         : "0"(1));
+#endif
     return lfr_getcpuflags_x86(d, c);
 }
 
