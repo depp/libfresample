@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os, re
+import cStringIO
 
 def listsource(path):
     a = []
@@ -33,12 +34,13 @@ class Builder(object):
             raise Exception('invalid base')
         self.base.defmakevar(var, val)
 
-    def build(self, *arg, base=None, **kw):
+    def build(self, *arg, **kw):
         if self.base is None:
             raise Exception('invalid base')
-        if base is None:
-            base = self
-        self.base.build(*arg, base=base, **kw)
+        if 'base' not in kw:
+            kw = dict(kw)
+            kw['base'] = self
+        self.base.build(*arg, **kw)
 
     def expand(self, val):
         def repl(match):
@@ -63,26 +65,24 @@ class Builder(object):
             objs.append(objpath)
         return objs
 
-    def default_targets(self, targets):
-        self.build('all', targets)
-
 class RootBuilder(Builder):
     def __init__(self):
         super(RootBuilder, self).__init__(None)
-        self._fp = open('Makefile', 'w')
+        self._fp = cStringIO.StringIO()
         self._dirs = set()
         self._phony = set(['all'])
-        self._fp.write('all:\n')
+        self._defaults = set()
 
-    def close(self):
-        f = self._fp
-        if not f:
-            return
-        f.write(' '.join(sorted(self._dirs)))
-        f.write(':\n\tmkdir -p $@\n')
-        f.write('.PHONY: ' + ' '.join(sorted(self._phony)))
-        f.close()
-        self._fp = None
+    def write(self):
+        fp = open('Makefile', 'w')
+        fp.write('all: %s\n' % ' '.join(sorted(self._defaults)))
+        fp.write('.PHONY: %s\n' % ' '.join(sorted(self._phony)))
+        fp.write('all_dirs := %s\n' % ' '.join(sorted(self._dirs)))
+        fp.write('missing_dirs := $(filter-out $(wildcard $(all_dirs)),$(all_dirs))\n')
+        fp.write('$(all_dirs):\n')
+        fp.write('\tmkdir -p $@\n')
+        fp.write(self._fp.getvalue())
+        fp.close()
 
     def defmakevar(self, var, val):
         self._fp.write('%s := %s\n' % (var, val))
@@ -90,14 +90,19 @@ class RootBuilder(Builder):
     def getfp():
         return self._fp
 
-    def build(self, target, deps, *cmds, base=None, phony=False):
+    def build(self, target, deps, *cmds, **kw):
+        base = kw.get('base', self)
+        phony = kw.get('phony', False)
+        extra = set(kw) - set(['base', 'phony'])
+        if extra:
+            raise Exception('extra keyword arg')
         if base is None:
             base = self
         target = base.expand(target)
         deps = [base.expand(dep) for dep in deps]
         dirpath = os.path.dirname(target)
         if dirpath:
-            deps = list(deps) + [dirpath]
+            deps = list(deps) + ['$(missing_dirs)']
             self._dirs.add(dirpath)
         f = self._fp
         f.write(target + ':')
@@ -108,6 +113,9 @@ class RootBuilder(Builder):
             f.write('\t' + base.expand(cmd) + '\n')
         if phony:
             self._phony.add(target)
+
+    def default_targets(self, targets):
+        self._defaults.update([self.expand(target) for target in targets])
 
 SPECIAL = {
     'ppc': ['altivec'],
@@ -186,23 +194,14 @@ def run():
     p['builddir'] = 'build'
     p['cflags'] = '$(PROJ_CFLAGS) $(CFLAGS)'
     p['ldflags'] = '$(PROJ_LDFLAGS) $(LDFLAGS)'
-    try:
-        p.defmakevar('CFLAGS', '-O2 -g')
-        p.defmakevar('PROJ_CFLAGS', '-Iinclude')
-        archs = ['i386', 'ppc', 'x86_64', 'ppc64']
-        a = MultiArchBuilder(p, archs)
-        lib = a.staticlib('fresample', libsrc)
-        exe = a.executable('fresample', lib + srcsrc)
-        p.default_targets(lib + exe)
-        p.build('clean', [], 'rm -rf build', phony=True)
-    except:
-        p.close()
-        try:
-            os.unlink('Makefile')
-        except:
-            pass
-        raise
-    finally:
-        p.close()
+    p.defmakevar('CFLAGS', '-O2 -g')
+    p.defmakevar('PROJ_CFLAGS', '-Iinclude')
+    archs = ['i386', 'ppc', 'x86_64', 'ppc64']
+    a = MultiArchBuilder(p, archs)
+    lib = a.staticlib('fresample', libsrc)
+    exe = a.executable('fresample', lib + srcsrc)
+    p.default_targets(lib + exe)
+    p.build('clean', [], 'rm -rf build', phony=True)
+    p.write()
 
 run()
