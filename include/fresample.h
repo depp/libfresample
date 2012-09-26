@@ -136,6 +136,9 @@ LFR_PUBLIC extern const struct lfr_cpuf LFR_CPUF[];
 LFR_PUBLIC unsigned
 lfr_setcpufeatures(unsigned flags);
 
+/*
+  Audio sample formats.
+*/
 typedef enum {
     LFR_FMT_U8,
     LFR_FMT_S16BE,
@@ -145,6 +148,28 @@ typedef enum {
     LFR_FMT_F32BE,
     LFR_FMT_F32LE
 } lfr_fmt_t;
+
+#define LFR_FMT_COUNT ((int) LFR_FMT_F32LE + 1)
+
+#if LFR_BYTE_ORDER == LFR_BIG_ENDIAN
+# define LFR_FMT_S16_NATIVE LFR_FMT_S16BE
+# define LFR_FMT_S16_SWAPPED LFR_FMT_S16LE
+# define LFR_FMT_F32_NATIVE LFR_FMT_F32BE
+# define LFR_FMT_F32_SWAPPED LFR_FMT_F32LE
+#else
+# define LFR_FMT_S16_NATIVE LFR_FMT_S16LE
+# define LFR_FMT_S16_SWAPPED LFR_FMT_S16BE
+# define LFR_FMT_F32_NATIVE LFR_FMT_F32LE
+# define LFR_FMT_F32_SWAPPED LFR_FMT_F32BE
+#endif
+
+/*
+  Swap the byte order on 16-bit data.  The destination can either be
+  the same buffer as the source, or it can be a non-overlapping
+  buffer.  Behavior is undefined if the two buffers partially overlap.
+*/
+LFR_PUBLIC void
+lfr_swap16(void *dest, const void *src, size_t count);
 
 /*
   Names for filter quality presets.

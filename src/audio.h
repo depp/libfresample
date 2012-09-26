@@ -3,18 +3,7 @@
 #define AUDIO_H
 #include <stddef.h>
 #include <stdio.h>
-
-typedef enum {
-    AUDIO_U8,
-    AUDIO_S16BE,
-    AUDIO_S16LE,
-    AUDIO_S24BE,
-    AUDIO_S24LE,
-    AUDIO_F32BE,
-    AUDIO_F32LE
-} afmt_t;
-
-#define AUDIO_NUMFMT ((int) AUDIO_F32LE + 1)
+#include "fresample.h"
 
 struct audio {
     /* Allocated region for audio data.  If this is NULL, then the
@@ -28,7 +17,7 @@ struct audio {
     size_t nframe;
 
     /* Audio sample format */
-    afmt_t fmt;
+    lfr_fmt_t fmt;
 
     /* Number of channels */
     int nchan;
@@ -39,7 +28,7 @@ struct audio {
 
 /* Get the name for the given audio format.  */
 const char *
-audio_format_name(afmt_t fmt);
+audio_format_name(lfr_fmt_t fmt);
 
 /* Look up an audio format by name.  Returns -1 on failure.  */
 int
@@ -47,7 +36,7 @@ audio_format_lookup(const char *name);
 
 /* Get the size of an audio format in bytes.  */
 size_t
-audio_format_size(afmt_t fmt);
+audio_format_size(lfr_fmt_t fmt);
 
 /* Parse an audio sample rate.  Returns -1 on failure.  */
 int
@@ -74,13 +63,13 @@ audio_alias(struct audio *dest, const struct audio *src);
    must be initialized.  */
 void
 audio_alloc(struct audio *a,
-            size_t nframe, afmt_t format, int nchan, int rate);
+            size_t nframe, lfr_fmt_t format, int nchan, int rate);
 
 /* Load raw PCM into an audio structure.  The audio structure will
    alias the raw data.  */
 void
 audio_raw_load(struct audio *a, const void *data, size_t nframe,
-               afmt_t format, int nchan, int rate);
+               lfr_fmt_t format, int nchan, int rate);
 
 /* Return 1 if the file could be a WAV file, 0 otherwise.  */
 int
@@ -94,5 +83,9 @@ audio_wav_load(struct audio *a, const void *data, size_t length);
 /* Write a WAV file to disk.  */
 void
 audio_wav_save(FILE *fp, const struct audio *a);
+
+/* Convert an audio buffer to the given format.  */
+void
+audio_convert(struct audio *a, lfr_fmt_t fmt);
 
 #endif

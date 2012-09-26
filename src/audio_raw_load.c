@@ -5,7 +5,7 @@
 
 void
 audio_raw_load(struct audio *a, const void *data, size_t nframe,
-               afmt_t format, int nchan, int rate)
+               lfr_fmt_t format, int nchan, int rate)
 {
     if (a->alloc)
         free(a->alloc);

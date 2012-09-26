@@ -195,8 +195,6 @@ main(int argc, char *argv[])
     printf("Input: %s, %s, %s, %zu samples\n",
            audio_format_name(ain.fmt), frate, fnchan, ain.nframe);
 
-    if (ain.fmt != AUDIO_S16LE)
-        error("unsupported format");
     if (ain.nchan != 1 && ain.nchan != 2)
         error("unsupported number of channels "
               "(only mono and stereo supported)");
@@ -205,6 +203,7 @@ main(int argc, char *argv[])
         fputs("No rate conversion necessary\n", stdout);
         audio_alias(&aout, &ain);
     } else {
+        audio_convert(&ain, LFR_FMT_S16_NATIVE);
         len = (size_t) floor(
             (double) ain.nframe * (double) rate / (double) ain.rate + 0.5);
 
@@ -261,6 +260,7 @@ main(int argc, char *argv[])
 
         file_destroy(&din);
         audio_destroy(&ain);
+        audio_convert(&aout, LFR_FMT_S16LE);
     }
 
     file = fopen(files[1], "wb");

@@ -23,7 +23,7 @@ audio_wav_load(struct audio *a, const void *data, size_t length)
     uint16_t afmt, nchan, sampbits;
     uint32_t rate, nframe;
     const unsigned char *p;
-    afmt_t format;
+    lfr_fmt_t format;
 
     riff_parse(&riff, data, length);
 
@@ -54,17 +54,17 @@ audio_wav_load(struct audio *a, const void *data, size_t length)
         switch (sampbits) {
         case 8:
             nframe = tag->length / nchan;
-            format = AUDIO_U8;
+            format = LFR_FMT_U8;
             break;
 
         case 16:
             nframe = tag->length / (2 * nchan);
-            format = AUDIO_S16LE;
+            format = LFR_FMT_S16LE;
             break;
 
         case 24:
             nframe = tag->length / (3 * nchan);
-            format = AUDIO_S24LE;
+            format = LFR_FMT_S24LE;
             break;
 
         default:
@@ -79,7 +79,7 @@ audio_wav_load(struct audio *a, const void *data, size_t length)
             return;
         }
         nframe = tag->length / (4 * nchan);
-        format = AUDIO_F32LE;
+        format = LFR_FMT_F32LE;
         break;
 
     default:
