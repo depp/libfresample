@@ -109,6 +109,14 @@ class RootBuilder(Builder):
         if phony:
             self._phony.add(target)
 
+SPECIAL = {
+    'ppc': ['altivec'],
+    'ppc64': ['altivec'],
+    'i386': ['mmx', 'sse'],
+    'x86_64': ['mmx', 'sse']
+}
+ALL_SPECIAL = set([y for x in SPECIAL.values() for y in x])
+
 class ArchBuilder(Builder):
     def __init__(self, base, arch):
         super(ArchBuilder, self).__init__(base)
@@ -117,6 +125,17 @@ class ArchBuilder(Builder):
         self['cflags'] = '-arch %s %s' % (arch, base['cflags'])
         self['ldflags'] = '-arch %s %s' % (arch, base['ldflags'])
         self['arch'] = arch
+
+    def compile(self, srcs):
+        exclude = ALL_SPECIAL - set(SPECIAL[self._arch])
+        nsrcs = []
+        for src in srcs:
+            for e in exclude:
+                if e in src:
+                    break
+            else:
+                nsrcs.append(src)
+        return super(ArchBuilder, self).compile(nsrcs)
 
     def staticlib(self, target, srcs):
         objs = self.compile(srcs)
