@@ -1,44 +1,36 @@
 /* Copyright 2012 Dietrich Epp <depp@zdome.net> */
 #define LFR_IMPLEMENTATION 1
 
+#define LFR_CPU_FLAGS_SET 0x80000000u
+
 #include "cpu.h"
+
+extern const struct lfr_cpuf LFR_CPUF[] = {
+#if defined(LFR_CPU_X86)
+    { "mmx", LFR_CPUF_MMX },
+    { "sse", LFR_CPUF_SSE },
+    { "sse2", LFR_CPUF_SSE2 },
+    { "sse3", LFR_CPUF_SSE3 },
+    { "ssse3", LFR_CPUF_SSSE3 },
+    { "sse4_1", LFR_CPUF_SSE4_1 },
+    { "sse4_2", LFR_CPUF_SSE4_2 },
+#elif defined(LFR_CPU_PPC)
+    { "altivec", LFR_CPUF_ALTIVEC },
+#endif
+    { "", 0 }
+};
 
 #if defined(CPU_HASFLAGS)
 
 unsigned lfr_cpuflags;
 
-struct lfr_cpu_flagmap { unsigned x; unsigned y; };
-
-static const struct lfr_cpu_flagmap LFR_CPU_FLAGS[] = {
-#if defined(CPU_X86)
-    { LFR_CPU_MMX, CPUF_MMX },
-    { LFR_CPU_SSE, CPUF_SSE },
-    { LFR_CPU_SSE2, CPUF_SSE2 },
-    { LFR_CPU_SSE3, CPUF_SSE3 },
-    { LFR_CPU_SSSE3, CPUF_SSSE3 },
-    { LFR_CPU_SSE4_1, CPUF_SSE4_1 },
-    { LFR_CPU_SSE4_2, CPUF_SSE4_2 }
-#else
-# error "should not get here"
-#endif
-};
-
 unsigned
 lfr_setcpufeatures(unsigned flags)
 {
-    int i, n = sizeof(LFR_CPU_FLAGS) / sizeof(*LFR_CPU_FLAGS);
-    unsigned mask = 1, cpuflags, result;
-    for (i = 0; i < n; ++i) {
-        if (flags & LFR_CPU_FLAGS[i].x)
-            mask |= 1u << LFR_CPU_FLAGS[i].y;
-    }
-    lfr_cpuflags = cpuflags = lfr_getcpuflags() & mask;
-    result = 0;
-    for (i = 0; i < n; ++i) {
-        if (cpuflags & (1u << LFR_CPU_FLAGS[i].y))
-            result |= LFR_CPU_FLAGS[i].x;
-    }
-    return result;
+    unsigned x;
+    x = (lfr_getcpuflags() & flags) | LFR_CPU_FLAGS_SET;
+    lfr_cpuflags = x;
+    return x & ~LFR_CPU_FLAGS_SET;
 }
 
 #else
@@ -52,23 +44,26 @@ lfr_setcpufeatures(unsigned flags)
 
 #endif
 
-#if defined(CPU_X86)
+#if defined(LFR_CPU_X86)
 
-struct lfr_cpu_idmap { signed char idflag; signed char cpuflag; };
+struct lfr_cpu_idmap {
+    signed char idflag;
+    unsigned char cpuflag;
+};
 
 static const struct lfr_cpu_idmap LFR_CPU_EDX[] = {
-    { 23, CPUF_MMX },
-    { 25, CPUF_SSE },
-    { 26, CPUF_SSE2 },
-    { -1, -1 }
+    { 23, LFR_CPUF_MMX },
+    { 25, LFR_CPUF_SSE },
+    { 26, LFR_CPUF_SSE2 },
+    { -1, 0 }
 };
 
 static const struct lfr_cpu_idmap LFR_CPU_ECX[] = {
-    { 0, CPUF_SSE3 },
-    { 9, CPUF_SSSE3 },
-    { 19, CPUF_SSE4_1 },
-    { 20, CPUF_SSE4_2 },
-    { -1, -1 }
+    { 0, LFR_CPUF_SSE3 },
+    { 9, LFR_CPUF_SSSE3 },
+    { 19, LFR_CPUF_SSE4_1 },
+    { 20, LFR_CPUF_SSE4_2 },
+    { -1, 0 }
 };
 
 static unsigned
@@ -77,8 +72,8 @@ lfr_getcpuflags_x86_1(unsigned reg, const struct lfr_cpu_idmap *mp)
     int i;
     unsigned fl = 0;
     for (i = 0; mp[i].idflag >= 0; ++i) {
-        if ((reg & (1u << mp[i].idflag)) != 0 && mp[i].cpuflag >= 0)
-            fl |= 1u << mp[i].cpuflag;
+        if ((reg & (1u << mp[i].idflag)) != 0 && mp[i].cpuflag > 0)
+            fl |= mp[i].cpuflag;
     }
     return fl;
 }
@@ -86,7 +81,7 @@ lfr_getcpuflags_x86_1(unsigned reg, const struct lfr_cpu_idmap *mp)
 static unsigned
 lfr_getcpuflags_x86(unsigned edx, unsigned ecx)
 {
-    return 1 |
+    return LFR_CPU_FLAGS_SET |
         lfr_getcpuflags_x86_1(edx, LFR_CPU_EDX) |
         lfr_getcpuflags_x86_1(ecx, LFR_CPU_ECX);
 }
@@ -130,9 +125,20 @@ lfr_getcpuflags(void)
 unsigned
 lfr_getcpuflags(void)
 {
-    return 1;
+    return LFR_CPU_FLAGS_SET;
 }
 
 #endif
+
+#endif
+
+#if defined(LFR_CPU_PPC)
+#warning "Unknown OS, cannot determine altivec presence at runtime"
+
+unsigned
+lfr_getcpuflags(void)
+{
+    return LFR_CPU_FLAGS_SET;
+}
 
 #endif

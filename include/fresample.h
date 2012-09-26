@@ -42,21 +42,86 @@ extern "C" {
 # endif
 #endif
 
+#if defined(_M_X64) || defined(__x86_64__)
+# define LFR_CPU_X64 1
+# define LFR_CPU_X86 1
+#elif defined(_M_IX86) || defined(__i386__)
+# define LFR_CPU_X86 1
+#elif defined(__ppc64__)
+# define LFR_CPU_PPC64 1
+# define LFR_CPU_PPC 1
+#elif defined(__ppc__)
+# define LFR_CPU_PPC 1
+#endif
+
+#define LFR_LITTLE_ENDIAN 1234
+#define LFR_BIG_ENDIAN 4321
+
+#if defined(__BYTE_ORDER__)
+# if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#  define LFR_BYTE_ORDER LFR_BIG_ENDIAN
+# elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#  define LFR_BYTE_ORDER LFR_LITTLE_ENDIAN
+# endif
+#elif defined(__BIG_ENDIAN__)
+# define LFR_BYTE_ORDER LFR_BIG_ENDIAN
+#elif defined(__LITTLE_ENDIAN__)
+# define LFR_BYTE_ORDER LFR_LITTLE_ENDIAN
+#endif
+
+#if !defined(LFR_BYTE_ORDER)
+# if defined(LFR_CPU_X86)
+#  define LFR_BYTE_ORDER LFR_LITTLE_ENDIAN
+# elif defined(LFR_CPU_PPC)
+#  define LFR_BYTE_ORDER LFR_BIG_ENDIAN
+# else
+#  error "cannot determine machine byte order"
+# endif
+#endif
+
 /*
   CPU features to use or disable.
 */
 enum {
-    LFR_CPU_MMX    = (1u << 0),
-    LFR_CPU_SSE    = (1u << 1),
-    LFR_CPU_SSE2   = (1u << 2),
-    LFR_CPU_SSE3   = (1u << 3),
-    LFR_CPU_SSSE3  = (1u << 4),
-    LFR_CPU_SSE4_1 = (1u << 5),
-    LFR_CPU_SSE4_2 = (1u << 6),
+#if defined(LFR_CPU_X86)
+    LFR_CPUF_MMX     = (1u << 0),
+    LFR_CPUF_SSE     = (1u << 1),
+    LFR_CPUF_SSE2    = (1u << 2),
+    LFR_CPUF_SSE3    = (1u << 3),
+    LFR_CPUF_SSSE3   = (1u << 4),
+    LFR_CPUF_SSE4_1  = (1u << 5),
+    LFR_CPUF_SSE4_2  = (1u << 6),
+#else
+    LFR_CPUF_MMX     = 0u,
+    LFR_CPUF_SSE     = 0u,
+    LFR_CPUF_SSE2    = 0u,
+    LFR_CPUF_SSE3    = 0u,
+    LFR_CPUF_SSSE3   = 0u,
+    LFR_CPUF_SSE4_1  = 0u,
+    LFR_CPUF_SSE4_2  = 0u,
+#endif
 
-    LFR_CPU_NONE = 0,
-    LFR_CPU_ALL = 0xffffffff
+#if defined(LFR_CPU_PPC)
+    LFR_CPUF_ALTIVEC = (1u << 0),
+#else
+    LFR_CPUF_ALTIVEC = 0u,
+#endif
+
+    LFR_CPUF_NONE = 0u,
+    LFR_CPUF_ALL = 0xffffffffu
 };
+
+struct lfr_cpuf {
+    char name[8];
+    unsigned flag;
+};
+
+/*
+  Array of names for the CPU features this architecture supports.
+  Names are the lower case version of the flag names above, e.g.,
+  LFR_CPUF_MMX becomes "mmx".  Terminated by a zeroed entry.
+*/
+LFR_PUBLIC extern const struct lfr_cpuf LFR_CPUF[];
 
 /*
   Set which CPU features are allowed or disallowed.  This is primarily
@@ -70,6 +135,16 @@ enum {
 */
 LFR_PUBLIC unsigned
 lfr_setcpufeatures(unsigned flags);
+
+typedef enum {
+    LFR_FMT_U8,
+    LFR_FMT_S16BE,
+    LFR_FMT_S16LE,
+    LFR_FMT_S24BE,
+    LFR_FMT_S24LE,
+    LFR_FMT_F32BE,
+    LFR_FMT_F32LE
+} lfr_fmt_t;
 
 /*
   Names for filter quality presets.
