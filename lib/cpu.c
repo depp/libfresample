@@ -44,7 +44,51 @@ lfr_setcpufeatures(unsigned flags)
 
 #endif
 
+/* ========================================
+   OS X sysctl
+   ======================================== */
+
+#if !defined(CPUF) && defined(__APPLE__)
+#define CPUF 1
+#include <sys/sysctl.h>
+#include <string.h>
+
+/* The sysctl names are the same as the flag names we chase, with the
+   exception of ssse3, whose sysctl name is supplementalsse3.  */
+
+unsigned
+lfr_getcpuflags(void)
+{
+    int enabled, flags = 0, r, i, k;
+    size_t length;
+    char name[32];
+    const char *fname, *pfx = "hw.optional.";
+
+    k = strlen(pfx);
+    memcpy(name, pfx, k);
+    for (i = 0; LFR_CPUF[i].name[0]; ++i) {
+        fname = LFR_CPUF[i].name;
 #if defined(LFR_CPU_X86)
+        if (LFR_CPUF[i].flag == LFR_CPUF_SSSE3)
+            fname = "supplementalsse3";
+#endif
+        strcpy(name + k, fname);
+        length = sizeof(enabled);
+        r = sysctlbyname(name, &enabled, &length, NULL, 0);
+        if (r == 0 && enabled != 0)
+            flags |= LFR_CPUF[i].flag;
+    }
+    return LFR_CPU_FLAGS_SET | flags;
+}
+
+#endif
+
+/* ========================================
+   x86 CPUID
+   ======================================== */
+
+#if !defined(CPUF) && defined(LFR_CPU_X86)
+#define CPUF 1
 
 struct lfr_cpu_idmap {
     signed char idflag;
@@ -132,8 +176,12 @@ lfr_getcpuflags(void)
 
 #endif
 
-#if defined(LFR_CPU_PPC)
-#warning "Unknown OS, cannot determine altivec presence at runtime"
+/* ========================================
+   Fallback
+   ======================================== */
+
+#if !defined(CPUF) && defined(CPU_HASFLAGS)
+#warning "Unknown OS, cannot determine cpu features at runtime"
 
 unsigned
 lfr_getcpuflags(void)
