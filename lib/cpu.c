@@ -5,7 +5,7 @@
 
 #include "cpu.h"
 
-extern const struct lfr_cpuf LFR_CPUF[] = {
+const struct lfr_cpuf LFR_CPUF[] = {
 #if defined(LFR_CPU_X86)
     { "mmx", LFR_CPUF_MMX },
     { "sse", LFR_CPUF_SSE },
