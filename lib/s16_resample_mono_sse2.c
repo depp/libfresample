@@ -2,7 +2,7 @@
 #define LFR_IMPLEMENTATION 1
 
 #include "cpu.h"
-#if defined(CPU_X86)
+#if defined(LFR_CPU_X86)
 
 #include "s16.h"
 #include <stdint.h>

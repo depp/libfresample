@@ -10,9 +10,9 @@ lfr_s16_resample_stereo(
     const short *LFR_RESTRICT in, size_t inlen, int inrate,
     const struct lfr_s16 *LFR_RESTRICT filter)
 {
-#if defined(CPU_X86)
+#if defined(LFR_CPU_X86)
     unsigned f = CPU_FLAGS();
-    if (CPU_SUPPORTS(f, SSE2)) {
+    if (f & LFR_CPUF_SSE2) {
         lfr_s16_resample_stereo_sse2(
             out, outlen, outrate, in, inlen, inrate, filter);
         return;
