@@ -21,3 +21,7 @@ Makefile
 Makefile.in
 .deps
 .dirstamp
+
+# Xcode
+*.mode1v3
+*.pbxuser
