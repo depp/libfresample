@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import os, re
+import os, re, sys
 import cStringIO
 
 def listsource(path):
@@ -186,7 +186,37 @@ class MultiArchBuilder(Builder):
             'lipo -create %s -output $@' % (' '.join(exes)))
         return [exepath]
 
+def default_arch():
+    import platform
+    p = platform.processor()
+    if p == 'powerpc':
+        return 'ppc'
+    if re.match(r'^i\d86$'):
+        m = platform.machine()
+        if m == 'x86_64':
+            return m
+        return 'i386'
+    raise Exception('unknown platform: %s' % (p,))
+
 def run():
+    args = getargs()
+    config = args.get('CONFIG', 'release').lower()
+    if config == 'debug':
+        cflags = args.get('CFLAGS', '-O0 -g')
+        archs = args.get('ARCHS', None)
+        if archs is None:
+            archs = default_arch()
+    elif config == 'release':
+        cflags = args.get('CFLAGS', '-O2 -g')
+        archs = args.get('ARCHS', 'i386 ppc x86_64 ppc64')
+    else:
+        sys.stdout.write('unknown configuration: %s' % config)
+        sys.exit(1)
+    archs = archs.split()
+    if not archs:
+        sys.stdout.write('no architectures specified')
+        sys.exit(1)
+
     libsrc = listsource('lib')
     incsrc = listsource('include')
     srcsrc = listsource('src')
@@ -194,14 +224,37 @@ def run():
     p['builddir'] = 'build'
     p['cflags'] = '$(PROJ_CFLAGS) $(CFLAGS)'
     p['ldflags'] = '$(PROJ_LDFLAGS) $(LDFLAGS)'
-    p.defmakevar('CFLAGS', '-O2 -g')
+    p.defmakevar('CFLAGS', cflags)
     p.defmakevar('PROJ_CFLAGS', '-Iinclude')
-    archs = ['i386', 'ppc', 'x86_64', 'ppc64']
     a = MultiArchBuilder(p, archs)
     lib = a.staticlib('fresample', libsrc)
     exe = a.executable('fresample', lib + srcsrc)
     p.default_targets(lib + exe)
     p.build('clean', [], 'rm -rf build', phony=True)
     p.write()
+
+def usage():
+    sys.stderr.write('usage: genmake.py [VAR=VALUE...]\n')
+    sys.exit(1)
+
+VARS = set('CONFIG CFLAGS ARCHS'.split())
+USAGE = """\
+usage: genmake.py [VAR=VALUE]...
+variables: %s
+""" % (' '.join(sorted(VARS)))
+
+def getargs():
+    d = {}
+    for arg in sys.argv[1:]:
+        eq = arg.find('=')
+        if eq < 0:
+            usage()
+        var = arg[:eq].upper()
+        val = arg[eq+1:]
+        if var not in VARS:
+            sys.stderr.write('unknown variable: %s\n' % var)
+            sys.exit(1)
+        d[var] = val
+    return d
 
 run()
