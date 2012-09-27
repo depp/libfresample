@@ -44,7 +44,7 @@ lfr_swap16_scalar(void *dest, const void *src, size_t count)
         n = count;
         if ((uintptr_t) dest & 3u) {
             x = s16[0];
-            d16[i] = (x >> 8) | (x << 8);
+            d16[0] = (x >> 8) | (x << 8);
             n -= 1;
             s16 += 1;
             d16 += 1;
