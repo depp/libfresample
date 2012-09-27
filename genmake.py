@@ -1,6 +1,10 @@
 #!/usr/bin/env python
-import os, re, sys
+import os, re, sys, platform
 import cStringIO
+
+def fail(s):
+    sys.stderr.write(s + '\n')
+    sys.exit(1)
 
 def listsource(path):
     a = []
@@ -17,6 +21,7 @@ class Builder(object):
     def __init__(self, base):
         self.vars = {}
         self.base = base
+        self.arch = current_arch()
 
     def __setitem__(self, var, val):
         self.vars[var] = val
@@ -49,9 +54,17 @@ class Builder(object):
         return VARSUBST.sub(repl, val)
 
     def compile(self, sources):
+        exclude = ALL_SPECIAL - set(SPECIAL.get(self.arch, set()))
+        def do_exclude(src):
+            for e in exclude:
+                if e in src:
+                    return True
+            return False
         objs = []
         objdir = '@builddir@/obj'
         for src in sources:
+            if do_exclude(src):
+                continue
             dirpath, fname = os.path.split(src)
             base, ext = os.path.splitext(fname)
             if ext == '.c':
@@ -64,6 +77,23 @@ class Builder(object):
                 continue
             objs.append(objpath)
         return objs
+
+    def staticlib(self, target, srcs):
+        objs = self.compile(srcs)
+        libpath = os.path.join('@builddir@/product', 'lib' + target + '.a')
+        self.build(
+            libpath, objs,
+            'rm -f $@',
+            'ar rc $@ $(filter %.o,$^)',
+            'ranlib $@')
+        return [libpath]
+
+    def executable(self, target, srcs):
+        objs = self.compile(srcs)
+        exepath = os.path.join('@builddir@/product', target)
+        self.build(exepath, objs,
+            '$(CC) -o $@ @ldflags@ $(filter %.o,$^) $(filter %.a,$^)')
+        return [exepath]
 
 class RootBuilder(Builder):
     def __init__(self):
@@ -128,22 +158,11 @@ ALL_SPECIAL = set([y for x in SPECIAL.values() for y in x])
 class ArchBuilder(Builder):
     def __init__(self, base, arch):
         super(ArchBuilder, self).__init__(base)
-        self._arch = arch
+        self.arch = arch
         self['builddir'] = os.path.join(base['builddir'], arch)
         self['cflags'] = '-arch %s %s' % (arch, base['cflags'])
         self['ldflags'] = '-arch %s %s' % (arch, base['ldflags'])
         self['arch'] = arch
-
-    def compile(self, srcs):
-        exclude = ALL_SPECIAL - set(SPECIAL[self._arch])
-        nsrcs = []
-        for src in srcs:
-            for e in exclude:
-                if e in src:
-                    break
-            else:
-                nsrcs.append(src)
-        return super(ArchBuilder, self).compile(nsrcs)
 
     def staticlib(self, target, srcs):
         objs = self.compile(srcs)
@@ -151,13 +170,6 @@ class ArchBuilder(Builder):
         self.build(libpath, objs,
             'libtool -arch_only @arch@ -static -o $@ $(filter %.o,$^)')
         return [libpath]
-
-    def executable(self, target, srcs):
-        objs = self.compile(srcs)
-        exepath = os.path.join('@builddir@/product', target)
-        self.build(exepath, objs,
-            '$(CC) -o $@ @ldflags@ $(filter %.o,$^) $(filter %.a,$^)')
-        return [exepath]
 
 class MultiArchBuilder(Builder):
     def __init__(self, base, archs):
@@ -186,36 +198,41 @@ class MultiArchBuilder(Builder):
             'lipo -create %s -output $@' % (' '.join(exes)))
         return [exepath]
 
-def default_arch():
-    import platform
-    p = platform.processor()
+def current_arch():
+    p = platform.processor() or platform.machine()
     if p == 'powerpc':
         return 'ppc'
-    if re.match(r'^i\d86$'):
+    if re.match(r'^i\d86$', p):
         m = platform.machine()
         if m == 'x86_64':
             return m
         return 'i386'
-    raise Exception('unknown platform: %s' % (p,))
+    if p == 'x86_64':
+        return p
+    raise Exception('unknown arch: %s' % (p,))
 
 def run():
     args = getargs()
     config = args.get('CONFIG', 'release').lower()
-    if config == 'debug':
-        cflags = args.get('CFLAGS', '-O0 -g')
-        archs = args.get('ARCHS', None)
-        if archs is None:
-            archs = default_arch()
-    elif config == 'release':
-        cflags = args.get('CFLAGS', '-O2 -g')
-        archs = args.get('ARCHS', 'i386 ppc x86_64 ppc64')
+    if config not in ('debug', 'release'):
+        fail('unknown configuration: %s' % config)
+    release = config == 'release'
+    try:
+        cflags = args['CFLAGS']
+    except KeyError:
+        cflags = '-O2 -g' if release else '-O0 -g'
+    multiarch = platform.system() == 'Darwin'
+    if multiarch:
+        try:
+            archs = args['ARCHS']
+        except KeyError:
+            archs = 'i386 ppc x86_64 ppc64' if release else current_arch()
+        if not archs:
+            fail('no architectures specified\n')
+        archs = archs.split()
     else:
-        sys.stdout.write('unknown configuration: %s' % config)
-        sys.exit(1)
-    archs = archs.split()
-    if not archs:
-        sys.stdout.write('no architectures specified')
-        sys.exit(1)
+        if args.get('ARCHS', None):
+            fail('multiarch only supported on Darwin/OS X\n')
 
     libsrc = listsource('lib')
     incsrc = listsource('include')
@@ -225,8 +242,13 @@ def run():
     p['cflags'] = '$(PROJ_CFLAGS) $(CFLAGS)'
     p['ldflags'] = '$(PROJ_LDFLAGS) $(LDFLAGS)'
     p.defmakevar('CFLAGS', cflags)
+    if platform.system() == 'Linux':
+        p.defmakevar('PROJ_LDFLAGS', '-lm')
     p.defmakevar('PROJ_CFLAGS', '-Iinclude')
-    a = MultiArchBuilder(p, archs)
+    if multiarch:
+        a = MultiArchBuilder(p, archs)
+    else:
+        a = p
     lib = a.staticlib('fresample', libsrc)
     exe = a.executable('fresample', lib + srcsrc)
     p.default_targets(lib + exe)
