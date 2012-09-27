@@ -70,3 +70,9 @@ lfr_s16_resample_stereo_sse2(
     short *LFR_RESTRICT out, size_t outlen, int outrate,
     const short *LFR_RESTRICT in, size_t inlen, int inrate,
     const struct lfr_s16 *LFR_RESTRICT filter);
+
+LFR_PRIVATE void
+lfr_s16_resample_stereo_altivec(
+    short *LFR_RESTRICT out, size_t outlen, int outrate,
+    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    const struct lfr_s16 *LFR_RESTRICT filter);

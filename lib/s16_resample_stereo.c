@@ -17,6 +17,13 @@ lfr_s16_resample_stereo(
             out, outlen, outrate, in, inlen, inrate, filter);
         return;
     }
+#elif defined(LFR_CPU_PPC)
+    unsigned f = CPU_FLAGS();
+    if (f & LFR_CPUF_ALTIVEC) {
+        lfr_s16_resample_stereo_altivec(
+            out, outlen, outrate, in, inlen, inrate, filter);
+        return;
+    }
 #endif
     lfr_s16_resample_stereo_scalar(
         out, outlen, outrate, in, inlen, inrate, filter);
