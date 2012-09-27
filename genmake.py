@@ -6,6 +6,16 @@ def fail(s):
     sys.stderr.write(s + '\n')
     sys.exit(1)
 
+def parsebool(x):
+    if isinstance(x, bool):
+        return x
+    x = x.lower()
+    if x in ('1', 'yes', 'on', 'true'):
+        return True
+    if x in ('0', 'no', 'off', 'false'):
+        return False
+    fail('invalid boolean: %s' % (x,))
+
 def listsource(path):
     a = []
     for name in os.listdir(path):
@@ -234,9 +244,6 @@ def run():
         if args.get('ARCHS', None):
             fail('multiarch only supported on Darwin/OS X\n')
 
-    libsrc = listsource('lib')
-    incsrc = listsource('include')
-    srcsrc = listsource('src')
     p = RootBuilder()
     p['builddir'] = 'build'
     p['cflags'] = '$(PROJ_CFLAGS) $(CFLAGS)'
@@ -244,11 +251,18 @@ def run():
     p.defmakevar('CFLAGS', cflags)
     if platform.system() == 'Linux':
         p.defmakevar('PROJ_LDFLAGS', '-lm')
-    p.defmakevar('PROJ_CFLAGS', '-Iinclude')
+    fl = '-Iinclude -Wall -Wextra'
+    if parsebool(args.get('WERROR', False)):
+        fl += ' -Werror'
+    p.defmakevar('PROJ_CFLAGS', fl)
     if multiarch:
         a = MultiArchBuilder(p, archs)
     else:
         a = p
+
+    libsrc = listsource('lib')
+    incsrc = listsource('include')
+    srcsrc = listsource('src')
     lib = a.staticlib('fresample', libsrc)
     exe = a.executable('fresample', lib + srcsrc)
     p.default_targets(lib + exe)
@@ -259,7 +273,7 @@ def usage():
     sys.stderr.write('usage: genmake.py [VAR=VALUE...]\n')
     sys.exit(1)
 
-VARS = set('CONFIG CFLAGS ARCHS'.split())
+VARS = set('CONFIG CFLAGS ARCHS WERROR'.split())
 USAGE = """\
 usage: genmake.py [VAR=VALUE]...
 variables: %s
