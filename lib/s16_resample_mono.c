@@ -18,6 +18,13 @@ lfr_s16_resample_mono(
             pos, inv_ratio, out, outlen, in, inlen, filter);
         return;
     }
+#elif defined(LFR_CPU_PPC)
+    unsigned f = CPU_FLAGS();
+    if (f & LFR_CPUF_ALTIVEC) {
+        lfr_s16_resample_mono_altivec(
+            pos, inv_ratio, out, outlen, in, inlen, filter);
+        return;
+    }
 #endif
     lfr_s16_resample_mono_scalar(
         pos, inv_ratio, out, outlen, in, inlen, filter);
