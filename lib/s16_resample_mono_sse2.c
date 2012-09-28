@@ -84,16 +84,16 @@ lfr_storepartial1_epi16(__m128i x, int b, __m128i *dest)
 
 void
 lfr_s16_resample_mono_sse2(
-    short *LFR_RESTRICT out, size_t outlen, int outrate,
-    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    short *LFR_RESTRICT out, int outlen,
+    const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter)
 {
     const __m128i *firp, *inp;
     __m128i *outp;
     int in0, in1, out0, out1, outidx;
     int flen, log2nfilt;
-    int pf, si, sf;
-    uint64_t pi, tmp64;
+    lfr_fixed_t x;
 
     __m128i acc, acc0, acc1, acc2, fir0, fir1, fir_interp, dat0;
 #if !UNALIGNED_LOAD
@@ -106,7 +106,7 @@ lfr_s16_resample_mono_sse2(
     firp = (const __m128i *) filter->data;
     /* flen: Length of filter, measured in 128-bit words.  */
     flen = filter->nsamp >> 3;
-    off0 = (filter->nsamp >> 1);
+    off0 = filter->nsamp >> 1;
     /* log2nfilt: Base 2 logarithm of the number of filters.  */
     log2nfilt = filter->log2nfilt;
 
@@ -122,14 +122,7 @@ lfr_s16_resample_mono_sse2(
     out1 = outlen + out0;
     outp = (__m128i *) (out - out0);
 
-    /* pi, pf: integral and fractional position, measured from
-       the aligned input pointer.  si, sf: integral and fractional step per
-       frame.  */
-    pi = (uint64_t) in0 << (INTERP_BITS + log2nfilt);
-    pf = 0;
-    tmp64 = (uint64_t) inrate << (INTERP_BITS + log2nfilt);
-    si = (int) (tmp64 / outrate);
-    sf = (int) (tmp64 % outrate);
+    x = *pos + ((lfr_fixed_t) in0 << 32);
 
     acc0 = _mm_set1_epi32(0);
     acc1 = _mm_set1_epi32(0);
@@ -142,14 +135,16 @@ lfr_s16_resample_mono_sse2(
         /* fn: filter number
            ff0: filter factor for filter fn
            ff1: filter factor for filter fn+1 */
-        fn = ((unsigned) pi >> INTERP_BITS) & ((1u << log2nfilt) - 1);
-        ff1 = (unsigned) pi & ((1u << INTERP_BITS) - 1);
+        fn = (((unsigned) x >> 1) >> (31 - log2nfilt)) &
+            ((1u << log2nfilt) - 1);
+        ff1 = ((unsigned) x >> (32 - log2nfilt - INTERP_BITS)) &
+            ((1u << INTERP_BITS) - 1);
         ff0 = (1u << INTERP_BITS) - ff1;
         fir_interp = _mm_set1_epi32(ff0 | (ff1 << 16));
 
         /* off: offset in input corresponding to first sample in
            filter */
-        off = (int) (pi >> (INTERP_BITS + log2nfilt)) - off0;
+        off = (int) (x >> 32) - off0;
 
         /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
            of whole FIR data we will use */
@@ -240,13 +235,10 @@ lfr_s16_resample_mono_sse2(
             break;
         }
 
-        pf += sf;
-        pi += si;
-        if (pf >= outrate) {
-            pf -= outrate;
-            pi += 1;
-        }
+        x += inv_ratio;
     }
+
+    *pos = x - ((lfr_fixed_t) in0 << 32);
 
     /* Store remaing bytes */
     acc = _mm_set1_epi32(0);

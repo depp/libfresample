@@ -2,29 +2,22 @@
 #define LFR_IMPLEMENTATION 1
 
 #include "s16.h"
-#include <stdint.h>
 
 void
 lfr_s16_resample_stereo_scalar(
-    short *LFR_RESTRICT out, size_t outlen, int outrate,
-    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    short *LFR_RESTRICT out, int outlen,
+    const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter)
 {
-    int i, j, pf, sf, si, acc0, acc1, f, b, fn, ff0, ff1, off, flen;
+    int i, j, acc0, acc1, f, b, fn, ff0, ff1, off, flen;
     const short *fd;
-    uint64_t pi, tmp64;
+    lfr_fixed_t x;
 
     fd = filter->data;
     flen = filter->nsamp;
     b = filter->log2nfilt;
-
-    /* pi, pf: position, integral and fractional
-        si, sf: delta position, integral and fractional */
-    pi = 0;
-    pf = 0;
-    tmp64 = (uint64_t) inrate << (b + INTERP_BITS);
-    si = (int) (tmp64 / outrate);
-    sf = (int) (tmp64 % outrate);
+    x = *pos;
 
     for (i = 0; i < outlen; ++i) {
         /* acc: FIR accumulator */
@@ -33,11 +26,12 @@ lfr_s16_resample_stereo_scalar(
         /* fn: filter number
            ff0: filter factor for filter fn
            ff1: filter factor for filter fn+1 */
-        fn = ((unsigned) pi >> INTERP_BITS) & ((1u << b) - 1);
-        ff1 = (unsigned) pi & ((1u << INTERP_BITS) - 1);
+        fn = (((unsigned) x >> 1) >> (31 - b)) & ((1u << b) - 1);
+        ff1 = ((unsigned) x >> (32 - b - INTERP_BITS))
+            & ((1u << INTERP_BITS) - 1);
         ff0 = (1u << INTERP_BITS) - ff1;
         /* off: offset in input corresponding to first sample in filter */
-        off = (int) (pi >> (INTERP_BITS + b)) - (flen >> 1);
+        off = (int) (x >> 32) - (flen >> 1);
         for (j = 0; j < flen; ++j) {
             if (j + off < 0 || j + off >= inlen)
                 continue;
@@ -59,11 +53,8 @@ lfr_s16_resample_stereo_scalar(
         out[i*2+0] = acc0;
         out[i*2+1] = acc1;
 
-        pf += sf;
-        pi += si;
-        if (pf >= outrate) {
-            pf -= outrate;
-            pi += 1;
-        }
+        x += inv_ratio;
     }
+
+    *pos = x;
 }

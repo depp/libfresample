@@ -6,25 +6,26 @@
 
 void
 lfr_s16_resample_stereo(
-    short *LFR_RESTRICT out, size_t outlen, int outrate,
-    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    short *LFR_RESTRICT out, int outlen,
+    const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter)
 {
 #if defined(LFR_CPU_X86)
     unsigned f = CPU_FLAGS();
     if (f & LFR_CPUF_SSE2) {
         lfr_s16_resample_stereo_sse2(
-            out, outlen, outrate, in, inlen, inrate, filter);
+            pos, inv_ratio, out, outlen, in, inlen, filter);
         return;
     }
 #elif defined(LFR_CPU_PPC)
     unsigned f = CPU_FLAGS();
     if (f & LFR_CPUF_ALTIVEC) {
         lfr_s16_resample_stereo_altivec(
-            out, outlen, outrate, in, inlen, inrate, filter);
+            pos, inv_ratio, out, outlen, in, inlen, filter);
         return;
     }
 #endif
     lfr_s16_resample_stereo_scalar(
-        out, outlen, outrate, in, inlen, inrate, filter);
+        pos, inv_ratio, out, outlen, in, inlen, filter);
 }

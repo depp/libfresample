@@ -108,6 +108,7 @@ main(int argc, char *argv[])
     struct lfr_s16 *fp;
     FILE *file;
     clock_t t0, t1;
+    lfr_fixed_t pos, inv_ratio;
 
     benchmark = -1;
     nfiles = 0;
@@ -212,36 +213,47 @@ main(int argc, char *argv[])
                audio_format_name(ain.fmt), frate, fnchan, len);
         audio_alloc(&aout, len, ain.fmt, ain.nchan, rate);
 
+        inv_ratio =
+            (((lfr_fixed_t) ain.rate << 32) + aout.rate / 2) / aout.rate;
+
         fp = lfr_s16_new_preset(ain.rate, aout.rate, quality);
 
         if (ain.nchan == 1) {
+            pos = 0;
             lfr_s16_resample_mono(
-                aout.alloc, aout.nframe, aout.rate,
-                ain.data, ain.nframe, ain.rate,
+                &pos, inv_ratio,
+                aout.alloc, aout.nframe,
+                ain.data, ain.nframe,
                 fp);
 
             if (benchmark > 0) {
                 t0 = clock();
                 for (bi = 0; bi < benchmark; ++bi) {
+                    pos = 0;
                     lfr_s16_resample_mono(
-                        aout.alloc, aout.nframe, aout.rate,
-                        ain.data, ain.nframe, ain.rate,
+                        &pos, inv_ratio,
+                        aout.alloc, aout.nframe,
+                        ain.data, ain.nframe,
                         fp);
                 }
                 t1 = clock();
             }
         } else {
+            pos = 0;
             lfr_s16_resample_stereo(
-                aout.alloc, aout.nframe, aout.rate,
-                ain.data, ain.nframe, ain.rate,
+                &pos, inv_ratio,
+                aout.alloc, aout.nframe,
+                ain.data, ain.nframe,
                 fp);
 
             if (benchmark > 0) {
                 t0 = clock();
                 for (bi = 0; bi < benchmark; ++bi) {
+                    pos = 0;
                     lfr_s16_resample_stereo(
-                        aout.alloc, aout.nframe, aout.rate,
-                        ain.data, ain.nframe, ain.rate,
+                        &pos, inv_ratio,
+                        aout.alloc, aout.nframe,
+                        ain.data, ain.nframe,
                         fp);
                 }
                 t1 = clock();

@@ -49,30 +49,35 @@ struct lfr_s16 {
 
 LFR_PRIVATE void
 lfr_s16_resample_mono_scalar(
-    short *LFR_RESTRICT out, size_t outlen, int outrate,
-    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    short *LFR_RESTRICT out, int outlen,
+    const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter);
 
 LFR_PRIVATE void
 lfr_s16_resample_mono_sse2(
-    short *LFR_RESTRICT out, size_t outlen, int outrate,
-    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    short *LFR_RESTRICT out, int outlen,
+    const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter);
 
 LFR_PRIVATE void
 lfr_s16_resample_stereo_scalar(
-    short *LFR_RESTRICT out, size_t outlen, int outrate,
-    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    short *LFR_RESTRICT out, int outlen,
+    const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter);
 
 LFR_PRIVATE void
 lfr_s16_resample_stereo_sse2(
-    short *LFR_RESTRICT out, size_t outlen, int outrate,
-    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    short *LFR_RESTRICT out, int outlen,
+    const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter);
 
 LFR_PRIVATE void
 lfr_s16_resample_stereo_altivec(
-    short *LFR_RESTRICT out, size_t outlen, int outrate,
-    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    short *LFR_RESTRICT out, int outlen,
+    const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter);

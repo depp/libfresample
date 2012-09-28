@@ -15,6 +15,7 @@ extern "C" {
 #if defined(_MSC_VER)
 # undef LFR_RESTRICT
 # define LFR_RESTRICT __restrict
+# define LFR_INT64 __int64
 #endif
 
 #if defined(__GNUC__)
@@ -33,6 +34,7 @@ extern "C" {
 # else
 #  define LFR_PUBLIC
 # endif
+# define LFR_INT64 long long
 #endif
 
 #if defined(__STDC_VERSION__)
@@ -182,6 +184,17 @@ enum {
 };
 
 /*
+  A 32.32 fixed point number.  This is used for expressing fractional
+  positions in a buffer.
+
+  When used for converting from sample rate f_s to f_d, the timing
+  error at time t is bounded by t * 2^-33 * r_d / r_s.  For a
+  pessimistic conversion ratio, 8 kHz -> 192 kHz, this means that it
+  will take at least five days to accumulate one millisecond of error.
+*/
+typedef LFR_INT64 lfr_fixed_t;
+
+/*
   A low-pass filter for resampling 16-bit integer audio.
 */
 struct lfr_s16;
@@ -277,19 +290,41 @@ lfr_s16_new_preset(
     int f_inrate, int f_outrate, int quality);
 
 /*
-  Resample 16-bit integer audio.  Lengths are measured in frames, not
-  samples.
+  Resample 16-bit integer audio.
+
+  pos: Current position relative to the start of the input buffer,
+  expressed as a 32.32 fixed point number.  On return, this will
+  contain the updated position.  Positions outside the input buffer
+  are acceptable, it will be treated as if the input buffer were
+  padded with an unlimited number of zeroes on either side.
+
+  inv_ratio: Inverse of the resampling ratio, expressed as a 32.32
+  fixed point number.  This number is equal to the input sample rate
+  divided by the output sample rate.
+
+  out, in: Input and output buffers.  The buffers are not permitted to
+  alias each other.
+
+  outlen, inlen: Length of buffers, in frames.  Note that the length
+  type is 'int' instead of 'size_t'; this matches the precision of
+  buffer positions.
+
+  filter: A suitable low-pass filter for resampling at the given
+  ratio.
 */
+
 LFR_PUBLIC void
 lfr_s16_resample_mono(
-    short *LFR_RESTRICT out, size_t outlen, int outrate,
-    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    short *LFR_RESTRICT out, int outlen,
+    const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter);
 
 LFR_PUBLIC void
 lfr_s16_resample_stereo(
-    short *LFR_RESTRICT out, size_t outlen, int outrate,
-    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    short *LFR_RESTRICT out, int outlen,
+    const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter);
 
 #ifdef __cplusplus

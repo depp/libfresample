@@ -71,16 +71,16 @@ lfr_storepartial1_vec16(vector signed short x, int b,
 
 void
 lfr_s16_resample_stereo_altivec(
-    short *LFR_RESTRICT out, size_t outlen, int outrate,
-    const short *LFR_RESTRICT in, size_t inlen, int inrate,
+    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    short *LFR_RESTRICT out, int outlen,
+    const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter)
 {
     const vector signed short *firp, *inp;
     vector signed short *outp;
     int in0, in1, out0, out1, outidx;
     int flen, log2nfilt;
-    int pf, si, sf;
-    uint64_t pi, tmp64;
+    lfr_fixed_t x;
 
     vector unsigned char perm_hi64 =
         { 0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23 };
@@ -124,14 +124,7 @@ lfr_s16_resample_stereo_altivec(
     out1 = outlen + out0;
     outp = (vector signed short *) (out - out0 * 2);
 
-    /* pi, pf: integral and fractional position, measured from
-       the aligned input pointer.  si, sf: integral and fractional step per
-       frame.  */
-    pi = (uint64_t) in0 << (INTERP_BITS + log2nfilt);
-    pf = 0;
-    tmp64 = (uint64_t) inrate << (INTERP_BITS + log2nfilt);
-    si = (int) (tmp64 / outrate);
-    sf = (int) (tmp64 % outrate);
+    x = *pos + ((lfr_fixed_t) in0 << 32);
 
     acc0 = vec_splat_s32(0);
     acc1 = vec_splat_s32(0);
@@ -146,8 +139,10 @@ lfr_s16_resample_stereo_altivec(
         /* fn: filter number
            ff0: filter factor for filter fn
            ff1: filter factor for filter fn+1 */
-        fn = ((unsigned) pi >> INTERP_BITS) & ((1u << log2nfilt) - 1);
-        ff1 = (unsigned) pi & ((1u << INTERP_BITS) - 1);
+        fn = (((unsigned) x >> 1) >> (31 - log2nfilt)) &
+            ((1u << log2nfilt) - 1);
+        ff1 = ((unsigned) x >> (32 - log2nfilt - INTERP_BITS)) &
+            ((1u << INTERP_BITS) - 1);
         ff0 = (1u << INTERP_BITS) - ff1;
         un.h[0] = ff0;
         un.h[1] = ff1;
@@ -156,7 +151,7 @@ lfr_s16_resample_stereo_altivec(
 
         /* off: offset in input corresponding to first sample in
            filter */
-        off = (int) (pi >> (INTERP_BITS + log2nfilt)) - off0;
+        off = (int) (x >> 32) - off0;
 
         /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
            of whole FIR data we will use */
@@ -248,15 +243,12 @@ lfr_s16_resample_stereo_altivec(
                 lfr_storepartial0_vec16(acc_r, out0 * 2, outp);
             outp += 1;
             break;
-       }
-
-        pf += sf;
-        pi += si;
-        if (pf >= outrate) {
-            pf -= outrate;
-            pi += 1;
         }
+
+        x += inv_ratio;
     }
+
+    *pos = x - ((lfr_fixed_t) in0 << 32);
 
     /* Store remaing bytes */
     if ((outidx & 3) == 0)
