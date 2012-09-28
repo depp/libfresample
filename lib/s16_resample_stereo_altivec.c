@@ -158,8 +158,10 @@ lfr_s16_resample_stereo_altivec(
         fidx0 = (in0 - off + 7) >> 3;
         fidx1 = (in1 - off) >> 3;
         if (fidx0 > 0) {
-            if (fidx0 > flen)
+            if (fidx0 > flen) {
+                acc = vec_splat_s32(0);
                 goto accumulate;
+            }
             accs0 = 0;
             accs1 = 0;
             t = (off > in0) ? off : in0;
@@ -177,8 +179,10 @@ lfr_s16_resample_stereo_altivec(
             fidx0 = 0;
         }
         if (fidx1 < flen) {
-            if (fidx1 < 0)
+            if (fidx1 < 0) {
+                acc = vec_splat_s32(0);
                 goto accumulate;
+            }
             accs0 = 0;
             accs1 = 0;
             t = (off + flen*8 < in1) ? (off + flen*8) : in1;
