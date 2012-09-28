@@ -24,7 +24,7 @@ audio_format_lookup(const char *name)
 {
     int i, c;
     char tmp[sizeof(*AUDIO_FORMAT_NAME)];
-    for (i = 0; i < sizeof(tmp); ++i) {
+    for (i = 0; i < (int) sizeof(tmp); ++i) {
         c = name[i];
         if (c >= 'a' && c <= 'z')
             c += 'A' - 'a';
@@ -32,9 +32,9 @@ audio_format_lookup(const char *name)
         if (!c)
             break;
     }
-    if (i >= sizeof(tmp))
+    if (i >= (int) sizeof(tmp))
         return -1;
-    for (i = 0; i < sizeof(tmp); ++i)
+    for (i = 0; i < (int) sizeof(tmp); ++i)
         tmp[i] = '\0';
     for (i = 0; i < LFR_FMT_COUNT; ++i) {
         if (!memcmp(AUDIO_FORMAT_NAME[i], tmp, sizeof(tmp)))
