@@ -75,9 +75,36 @@
         LOOP_ACCUM;                                     \
     }
 
+static __inline void
+lfr_storepartial0_epi16(__m128i x, int b, __m128i *dest)
+{
+    union {
+        unsigned short h[8];
+        __m128i x;
+    } u;
+    int i;
+    u.x = x;
+    for (i = (b & 7); i < 8; ++i)
+        ((short *) dest)[i] = u.h[i];
+}
+
+static __inline void
+lfr_storepartial1_epi16(__m128i x, int b, __m128i *dest)
+{
+    union {
+        unsigned short h[8];
+        __m128i x;
+    } u;
+    int i;
+    u.x = x;
+    for (i = 0; i < (b & 7); ++i)
+        ((short *) dest)[i] = u.h[i];
+}
+
 void
 lfr_s16_resample_stereo_sse2(
     lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    unsigned *dither,
     short *LFR_RESTRICT out, int outlen,
     const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter)
@@ -89,11 +116,20 @@ lfr_s16_resample_stereo_sse2(
     lfr_fixed_t x;
 
     __m128i acc, acc0, acc1, fir0, fir1, fir_interp, dat0, dat1;
+    __m128i dsv, lcg_a, lcg_c;
 #if !UNALIGNED_LOAD
     __m128i dat2;
 #endif
     int fn, ff0, ff1, off0, off, fidx0, fidx1;
     int accs0, accs1, i, f, t;
+    unsigned ds;
+
+    union {
+        unsigned d[4];
+        __m128i x;
+    } u;
+
+    (void) dither;
 
     /* firp: Pointer to beginning of filter coefficients, aligned.  */
     firp = (const __m128i *) filter->data;
@@ -116,6 +152,16 @@ lfr_s16_resample_stereo_sse2(
     outp = (__m128i *) (out - out0 * 2);
 
     x = *pos + ((lfr_fixed_t) in0 << 32);
+    ds = *dither;
+    for (i = 0; i < (out0 & 3) * 2; ++i)
+        ds = LCG_AI * ds + LCG_CI;
+    for (i = 0; i < 4; ++i) {
+        u.d[i] = ds;
+        ds = ds * LCG_A + LCG_C;
+    }
+    dsv = u.x;
+    lcg_a = _mm_set1_epi32(LCG_A4);
+    lcg_c = _mm_set1_epi32(LCG_C4);
 
     acc0 = _mm_set1_epi32(0);
     acc1 = _mm_set1_epi32(0);
@@ -206,6 +252,29 @@ lfr_s16_resample_stereo_sse2(
             acc0 = _mm_add_epi32(
                 _mm_unpacklo_epi64(acc0, acc),
                 _mm_unpackhi_epi64(acc0, acc));
+
+            /* Apply dither */
+            acc1 = _mm_add_epi32(acc1, _mm_srli_epi32(dsv, 17));
+            dsv = _mm_add_epi32(
+                _mm_unpacklo_epi32(
+                    _mm_shuffle_epi32(
+                        _mm_mul_epu32(dsv, lcg_a),
+                        _MM_SHUFFLE(0, 0, 2, 0)),
+                    _mm_shuffle_epi32(
+                        _mm_mul_epu32(_mm_srli_si128(dsv, 4), lcg_a),
+                        _MM_SHUFFLE(0, 0, 2, 0))),
+                lcg_c);
+            acc0 = _mm_add_epi32(acc0, _mm_srli_epi32(dsv, 17));
+            dsv = _mm_add_epi32(
+                _mm_unpacklo_epi32(
+                    _mm_shuffle_epi32(
+                        _mm_mul_epu32(dsv, lcg_a),
+                        _MM_SHUFFLE(0, 0, 2, 0)),
+                    _mm_shuffle_epi32(
+                        _mm_mul_epu32(_mm_srli_si128(dsv, 4), lcg_a),
+                        _MM_SHUFFLE(0, 0, 2, 0))),
+                lcg_c);
+
             acc = _mm_packs_epi32(
                 _mm_srai_epi32(acc1, 15),
                 _mm_srai_epi32(acc0, 15));

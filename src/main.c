@@ -11,6 +11,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#define DITHER_SEED 0xc90fdaa2
+
 static void
 cpu_features_set(const char *str)
 {
@@ -109,6 +111,7 @@ main(int argc, char *argv[])
     FILE *file;
     clock_t t0, t1;
     lfr_fixed_t pos, inv_ratio;
+    unsigned dither;
 
     benchmark = -1;
     nfiles = 0;
@@ -220,8 +223,9 @@ main(int argc, char *argv[])
 
         if (ain.nchan == 1) {
             pos = 0;
+            dither = DITHER_SEED;
             lfr_s16_resample_mono(
-                &pos, inv_ratio,
+                &pos, inv_ratio, &dither,
                 aout.alloc, aout.nframe,
                 ain.data, ain.nframe,
                 fp);
@@ -230,8 +234,9 @@ main(int argc, char *argv[])
                 t0 = clock();
                 for (bi = 0; bi < benchmark; ++bi) {
                     pos = 0;
+                    dither = DITHER_SEED;
                     lfr_s16_resample_mono(
-                        &pos, inv_ratio,
+                        &pos, inv_ratio, &dither,
                         aout.alloc, aout.nframe,
                         ain.data, ain.nframe,
                         fp);
@@ -240,8 +245,9 @@ main(int argc, char *argv[])
             }
         } else {
             pos = 0;
+            dither = DITHER_SEED;
             lfr_s16_resample_stereo(
-                &pos, inv_ratio,
+                &pos, inv_ratio, &dither,
                 aout.alloc, aout.nframe,
                 ain.data, ain.nframe,
                 fp);
@@ -250,8 +256,9 @@ main(int argc, char *argv[])
                 t0 = clock();
                 for (bi = 0; bi < benchmark; ++bi) {
                     pos = 0;
+                    dither = DITHER_SEED;
                     lfr_s16_resample_stereo(
-                        &pos, inv_ratio,
+                        &pos, inv_ratio, &dither,
                         aout.alloc, aout.nframe,
                         ain.data, ain.nframe,
                         fp);

@@ -4,6 +4,7 @@
 void
 lfr_s16_resample_stereo_scalar(
     lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    unsigned *dither,
     short *LFR_RESTRICT out, int outlen,
     const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter)
@@ -11,11 +12,14 @@ lfr_s16_resample_stereo_scalar(
     int i, j, acc0, acc1, f, b, fn, ff0, ff1, off, flen;
     const short *fd;
     lfr_fixed_t x;
+    unsigned ds0, ds1;
 
     fd = filter->data;
     flen = filter->nsamp;
     b = filter->log2nfilt;
     x = *pos;
+    ds0 = *dither;
+    ds1 = LCG_A * ds0 + LCG_C;
 
     for (i = 0; i < outlen; ++i) {
         /* acc: FIR accumulator */
@@ -38,6 +42,8 @@ lfr_s16_resample_stereo_scalar(
             acc0 += in[(j + off)*2+0] * f;
             acc1 += in[(j + off)*2+1] * f;
         }
+        acc0 += (int) (ds0 >> 17);
+        acc1 += (int) (ds1 >> 17);
         acc0 >>= 15;
         acc1 >>= 15;
         if (acc0 > 0x7fff)
@@ -52,7 +58,10 @@ lfr_s16_resample_stereo_scalar(
         out[i*2+1] = acc1;
 
         x += inv_ratio;
+        ds0 = LCG_A2 * ds0 + LCG_C2;
+        ds1 = LCG_A2 * ds1 + LCG_C2;
     }
 
     *pos = x;
+    *dither = ds0;
 }

@@ -4,6 +4,7 @@
 void
 lfr_s16_resample_mono_scalar(
     lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    unsigned *dither,
     short *LFR_RESTRICT out, int outlen,
     const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter)
@@ -11,11 +12,13 @@ lfr_s16_resample_mono_scalar(
     int i, j, acc, f, b, fn, ff0, ff1, off, flen;
     const short *fd;
     lfr_fixed_t x;
+    unsigned ds;
 
     fd = filter->data;
     flen = filter->nsamp;
     b = filter->log2nfilt;
     x = *pos;
+    ds = *dither;
 
     for (i = 0; i < outlen; ++i) {
         /* acc: FIR accumulator */
@@ -36,6 +39,7 @@ lfr_s16_resample_mono_scalar(
                  fd[(fn+1) * flen + j] * ff1) >> INTERP_BITS;
             acc += in[j + off] * f;
         }
+        acc += (int) (ds >> 17);
         acc >>= 15;
         if (acc > 0x7fff)
             acc = 0x7fff;
@@ -44,7 +48,9 @@ lfr_s16_resample_mono_scalar(
         out[i] = acc;
 
         x += inv_ratio;
+        ds = LCG_A * ds + LCG_C;
     }
 
     *pos = x;
+    *dither = ds;
 }

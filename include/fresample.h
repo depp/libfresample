@@ -302,6 +302,8 @@ lfr_s16_new_preset(
   fixed point number.  This number is equal to the input sample rate
   divided by the output sample rate.
 
+  dither: State of the PRNG used for dithering.
+
   out, in: Input and output buffers.  The buffers are not permitted to
   alias each other.
 
@@ -316,6 +318,7 @@ lfr_s16_new_preset(
 LFR_PUBLIC void
 lfr_s16_resample_mono(
     lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    unsigned *dither,
     short *LFR_RESTRICT out, int outlen,
     const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter);
@@ -323,6 +326,7 @@ lfr_s16_resample_mono(
 LFR_PUBLIC void
 lfr_s16_resample_stereo(
     lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    unsigned *dither,
     short *LFR_RESTRICT out, int outlen,
     const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter);

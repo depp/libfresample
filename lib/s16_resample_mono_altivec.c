@@ -60,6 +60,7 @@ lfr_storepartial1_vec16(vector signed short x, int b,
 void
 lfr_s16_resample_mono_altivec(
     lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
+    unsigned *dither,
     short *LFR_RESTRICT out, int outlen,
     const short *LFR_RESTRICT in, int inlen,
     const struct lfr_s16 *LFR_RESTRICT filter)
@@ -76,17 +77,18 @@ lfr_s16_resample_mono_altivec(
     vector signed short fir0, fir1, fir_interp, dat0, dat1, acc_r;
     vector unsigned int acc_shift, fir_shift;
     vector signed int acc, acc0, acc1, acc2, zero;
+    vector unsigned int dsv;
+    vector unsigned int lcg_a = { LCG_A4, LCG_A4, LCG_A4, LCG_A4 };
+    vector unsigned int lcg_c = { LCG_C4, LCG_C4, LCG_C4, LCG_C4 };
     int fn, ff0, ff1, off0, off, fidx0, fidx1;
     int accs, i, f, t;
+    unsigned ds;
 
     union {
         unsigned short h[8];
         int w[4];
         vector signed int x;
     } un;
-    un.w[1] = 0;
-    un.w[2] = 0;
-    un.w[3] = 0;
 
     zero = vec_splat_s32(0);
     perm_lo64 = vec_add(perm_hi64, vec_splat_u8(8));
@@ -114,6 +116,18 @@ lfr_s16_resample_mono_altivec(
     outp = (vector signed short *) (out - out0);
 
     x = *pos + ((lfr_fixed_t) in0 << 32);
+    ds = *dither;
+    for (i = 0; i < (out0 & 7); ++i)
+        ds = LCG_AI * ds + LCG_CI;
+    for (i = 0; i < 4; ++i) {
+        un.w[i] = ds;
+        ds = ds * LCG_A + LCG_C;
+    }
+    dsv = un.x;
+
+    un.w[1] = 0;
+    un.w[2] = 0;
+    un.w[3] = 0;
 
     acc0 = vec_splat_s32(0);
     acc1 = vec_splat_s32(0);
@@ -225,6 +239,16 @@ lfr_s16_resample_mono_altivec(
             acc1 = vec_add(
                 vec_perm(acc1, acc0, perm_hi64),
                 vec_perm(acc1, acc0, perm_lo64));
+
+            acc2 = vec_add(
+                acc2,
+                (vector signed int) vec_sr(dsv, vec_splat_u32(17-32)));
+            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
+            acc1 = vec_add(
+                acc1,
+                (vector signed int) vec_sr(dsv, vec_splat_u32(17-32)));
+            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
+
             acc_r = vec_packs(
                 vec_sra(acc2, acc_shift),
                 vec_sra(acc1, acc_shift));
@@ -239,7 +263,12 @@ lfr_s16_resample_mono_altivec(
         x += inv_ratio;
     }
 
+    un.x = dsv;
+    ds = un.w[0];
+    for (i = 0; i < (out1 & 7); ++i)
+        ds = LCG_A * ds + LCG_C;
     *pos = x - ((lfr_fixed_t) in0 << 32);
+    *dither = ds;
 
     /* Store remaing bytes */
     if ((outidx & 7) == 0)
@@ -273,6 +302,15 @@ lfr_s16_resample_mono_altivec(
             acc1 = vec_add(
                 vec_perm(acc1, acc0, perm_hi64),
                 vec_perm(acc1, acc0, perm_lo64));
+
+            acc2 = vec_add(
+                acc2,
+                (vector signed int) vec_sr(dsv, vec_splat_u32(17-32)));
+            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
+            acc1 = vec_add(
+                acc1,
+                (vector signed int) vec_sr(dsv, vec_splat_u32(17-32)));
+
             acc_r = vec_packs(
                 vec_sra(acc2, acc_shift),
                 vec_sra(acc1, acc_shift));
