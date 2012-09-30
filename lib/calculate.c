@@ -43,18 +43,25 @@ LFR_PRIVATE void
 lfr_s16_calculate(short *LFR_RESTRICT data, int nsamp, int nfilt,
                   double offset, double cutoff, double beta)
 {
-    double kscale, yscale, sscale, t, w, x;
+    double x, x0, t, y, xscale, yscale;
+    short yi;
     int i, j;
-    kscale = 2.0 / (nsamp - 1);
     yscale = 32767.0 * 2.0 * cutoff / bessel_i0(beta);
-    sscale = (8.0 * atan(1.0)) * cutoff;
-    for (i = 0; i < nsamp; ++i) {
-        t = kscale * i - 1.0;
-        w = yscale * bessel_i0(beta * sqrt(1.0 - t * t));
-        for (j = 0; j <= nfilt; ++j) {
-            x = (i - (nsamp - 1) / 2) - j * offset;
-            data[j * nsamp + i] =
-                (short) floor(w * sinc(sscale * x) + 0.5);
+    xscale = (8.0 * atan(1.0)) * cutoff;
+    for (i = 0; i <= nfilt; ++i) {
+        x0 = (nsamp - 1) / 2 + offset * i;
+        for (j = 0; j < nsamp; ++j) {
+            x = j - x0;
+            t = x * (2.0 / (nsamp - 2));
+            if (t <= -1.0 || t >= 1.0) {
+                yi = 0;
+            } else {
+                y = yscale *
+                    bessel_i0(beta * sqrt(1.0 - t * t)) *
+                    sinc(xscale * x);
+                yi = (short) floor(y + 0.5);
+            }
+            data[i * nsamp + j] = yi;
         }
     }
 }
