@@ -53,7 +53,8 @@ lfr_s16_calculate(short *LFR_RESTRICT data, int nsamp, int nfilt,
         w = yscale * bessel_i0(beta * sqrt(1.0 - t * t));
         for (j = 0; j <= nfilt; ++j) {
             x = (i - (nsamp - 1) / 2) - j * offset;
-            data[j * nsamp + i] = (short) (w * sinc(sscale * x));
+            data[j * nsamp + i] =
+                (short) floor(w * sinc(sscale * x) + 0.5);
         }
     }
 }
