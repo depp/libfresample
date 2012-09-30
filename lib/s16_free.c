@@ -1,7 +1,5 @@
 /* Copyright 2012 Dietrich Epp <depp@zdome.net> */
-#define LFR_IMPLEMENTATION 1
-
-#include "fresample.h"
+#include "defs.h"
 #include <stdlib.h>
 
 void

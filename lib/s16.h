@@ -1,5 +1,5 @@
 /* Copyright 2012 Dietrich Epp <depp@zdome.net> */
-#include "fresample.h"
+#include "defs.h"
 
 /*
   Array of filters for filtering 16-bit integer data.

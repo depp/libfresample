@@ -1,9 +1,10 @@
 /* Copyright 2012 Dietrich Epp <depp@zdome.net> */
-#define LFR_IMPLEMENTATION 1
-
-#define LFR_CPU_FLAGS_SET 0x80000000u
-
 #include "cpu.h"
+
+/*
+  This is ORed with CPU flags, to mark the CPU flags as valid.
+*/
+#define LFR_CPU_FLAGS_SET 0x80000000u
 
 const struct lfr_cpuf LFR_CPUF[] = {
 #if defined(LFR_CPU_X86)

@@ -1,12 +1,10 @@
 /* Copyright 2012 Dietrich Epp <depp@zdome.net> */
-#define LFR_IMPLEMENTATION 1
+#define LFR_SSE2 1
 
 #include "cpu.h"
 #if defined(LFR_CPU_X86)
-
 #include "s16.h"
 #include <stdint.h>
-#include <emmintrin.h>
 
 #define UNALIGNED_LOAD 1
 
@@ -90,7 +88,7 @@ lfr_s16_resample_stereo_sse2(
     int flen, log2nfilt;
     lfr_fixed_t x;
 
-    __m128i acc, acc0, acc1, fir0, fir1, fir_interp, dat0, dat1, mask;
+    __m128i acc, acc0, acc1, fir0, fir1, fir_interp, dat0, dat1;
 #if !UNALIGNED_LOAD
     __m128i dat2;
 #endif
@@ -193,44 +191,30 @@ lfr_s16_resample_stereo_sse2(
 #endif
 
     accumulate:
-        if ((outidx & 1) == 0) {
+        switch (outidx & 3) {
+        case 0: case 2:
             acc0 = acc;
-        } else if ((outidx & 2) == 0) {
+            break;
+
+        case 1:
             acc1 = _mm_add_epi32(
                 _mm_unpacklo_epi64(acc0, acc),
                 _mm_unpackhi_epi64(acc0, acc));
-        } else {
+            break;
+
+        case 3:
             acc0 = _mm_add_epi32(
                 _mm_unpacklo_epi64(acc0, acc),
                 _mm_unpackhi_epi64(acc0, acc));
             acc = _mm_packs_epi32(
                 _mm_srai_epi32(acc1, 15),
                 _mm_srai_epi32(acc0, 15));
-            if (outidx - out0 >= 3) {
+            if (outidx - out0 >= 3)
                 *outp = acc;
-            } else {
-                mask = _mm_set1_epi32(-1);
-                switch (out0 & 3) {
-                case 0:
-                    break;
-
-                case 1:
-                    mask = _mm_slli_si128(mask, 4);
-                    _mm_maskmoveu_si128(acc, mask, (char *) outp);
-                    break;
-
-                case 2:
-                    mask = _mm_slli_si128(mask, 8);
-                    _mm_maskmoveu_si128(acc, mask, (char *) outp);
-                    break;
-
-                case 3:
-                    mask = _mm_slli_si128(mask, 12);
-                    _mm_maskmoveu_si128(acc, mask, (char *) outp);
-                    break;
-                }
-            }
+            else
+                lfr_storepartial_epi16(outp, acc, (out0 & 3) * 2, 8);
             outp += 1;
+            break;
         }
 
         x += inv_ratio;
@@ -240,41 +224,33 @@ lfr_s16_resample_stereo_sse2(
 
     /* Store remaing bytes */
     acc = _mm_set1_epi32(0);
-    mask = _mm_set1_epi32(-1);
-    switch (out1 & 3) {
-    case 0:
-        break;
+    if ((outidx & 3) == 0)
+        return;
+    for (; ; ++outidx) {
+        switch (outidx & 3) {
+        case 0: case 2:
+            acc0 = acc;
+            break;
 
-    case 1:
-        acc0 = _mm_add_epi32(
-            _mm_unpacklo_epi64(acc0, acc),
-            _mm_unpackhi_epi64(acc0, acc));
-        acc0 = _mm_packs_epi32(
-            _mm_srai_epi32(acc0, 15),
-            acc);
-        mask = _mm_srli_si128(mask, 24);
-        _mm_maskmoveu_si128(acc, mask, (char *) outp);
-        break;
+        case 1:
+            acc1 = _mm_add_epi32(
+                _mm_unpacklo_epi64(acc0, acc),
+                _mm_unpackhi_epi64(acc0, acc));
+            break;
 
-    case 2:
-        acc0 = _mm_packs_epi32(
-            _mm_srai_epi32(acc0, 15),
-            acc);
-        mask = _mm_srli_si128(mask, 8);
-        _mm_maskmoveu_si128(acc, mask, (char *) outp);
-        break;
-
-    case 3:
-        acc0 = _mm_add_epi32(
-            _mm_unpacklo_epi64(acc0, acc),
-            _mm_unpackhi_epi64(acc0, acc));
-        *outp = _mm_packs_epi32(
-            _mm_srai_epi32(acc1, 15),
-            _mm_srai_epi32(acc0, 15));
-
-        mask = _mm_srli_si128(mask, 4);
-        _mm_maskmoveu_si128(acc, mask, (char *) outp);
-        break;
+        case 3:
+            acc0 = _mm_add_epi32(
+                _mm_unpacklo_epi64(acc0, acc),
+                _mm_unpackhi_epi64(acc0, acc));
+            acc = _mm_packs_epi32(
+                _mm_srai_epi32(acc1, 15),
+                _mm_srai_epi32(acc0, 15));
+            lfr_storepartial_epi16(
+                outp, acc,
+                (unsigned) (out0 ^ out1) < 4 ? (out0 & 3) * 2 : 0,
+                (out1 & 3) * 2);
+            return;
+        }
     }
 }
 

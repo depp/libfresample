@@ -1,6 +1,4 @@
 /* Copyright 2012 Dietrich Epp <depp@zdome.net> */
-#define LFR_IMPLEMENTATION 1
-
 #include "calculate.h"
 #include <math.h>
 

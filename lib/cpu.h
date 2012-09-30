@@ -1,5 +1,5 @@
 /* Copyright 2012 Dietrich Epp <depp@zdome.net> */
-#include "fresample.h"
+#include "defs.h"
 
 #if defined(LFR_CPU_X86) || defined(LFR_CPU_PPC)
 # define CPU_HASFLAGS 1

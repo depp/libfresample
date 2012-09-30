@@ -1,5 +1,5 @@
 /* Copyright 2012 Dietrich Epp <depp@zdome.net> */
-#include "fresample.h"
+#include "defs.h"
 
 /*
   Calculate filter sets.

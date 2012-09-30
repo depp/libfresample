@@ -1,12 +1,10 @@
 /* Copyright 2012 Dietrich Epp <depp@zdome.net> */
-#define LFR_IMPLEMENTATION 1
+#define LFR_SSE2 1
 
 #include "cpu.h"
 #if defined(LFR_CPU_X86)
-
 #include "s16.h"
 #include <stdint.h>
-#include <emmintrin.h>
 
 #define UNALIGNED_LOAD 1
 
@@ -55,32 +53,6 @@
         LOOP_LOADFIR;                           \
         LOOP_ACCUM;                             \
     }
-
-static __inline void
-lfr_storepartial0_epi16(__m128i x, int b, __m128i *dest)
-{
-    union {
-        unsigned short h[8];
-        __m128i x;
-    } u;
-    int i;
-    u.x = x;
-    for (i = (b & 7); i < 8; ++i)
-        ((short *) dest)[i] = u.h[i];
-}
-
-static __inline void
-lfr_storepartial1_epi16(__m128i x, int b, __m128i *dest)
-{
-    union {
-        unsigned short h[8];
-        __m128i x;
-    } u;
-    int i;
-    u.x = x;
-    for (i = 0; i < (b & 7); ++i)
-        ((short *) dest)[i] = u.h[i];
-}
 
 void
 lfr_s16_resample_mono_sse2(
@@ -230,7 +202,7 @@ lfr_s16_resample_mono_sse2(
             if (outidx - out0 >= 7)
                 *outp = acc;
             else
-                lfr_storepartial0_epi16(acc, out0, outp);
+                lfr_storepartial_epi16(outp, acc, out0 & 7, 8);
             outp += 1;
             break;
         }
@@ -275,7 +247,9 @@ lfr_s16_resample_mono_sse2(
             acc = _mm_packs_epi32(
                 _mm_srai_epi32(acc2, 15),
                 _mm_srai_epi32(acc1, 15));
-            lfr_storepartial1_epi16(acc, out1, outp);
+            lfr_storepartial_epi16(
+                outp, acc,
+                (unsigned) (out0 ^ out1) < 8 ? (out0 & 7) : 0, out1 & 7);
             return;
         }
     }
