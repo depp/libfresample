@@ -13,13 +13,13 @@ lfr_s16_new_lowpass(
 
     /* Calculate length, and round up to multiple of 'align' */
     dw = (8 * atan(1.0)) * (f_stop - f_pass) / f_rate;
-    length0 = (snr - 8) / (2.285 * dw) + 1;
+    length0 = (snr - 8) / (4.57 * dw) + 1;
     length = (int) ceil(length0 / align) * align;
     if (length < align)
         length = align;
 
     /* Recalculate side lobe height from new length */
-    nsnr = (length - 1) * 2.285 * dw + 8;
+    nsnr = (length - 1) * 4.57 * dw + 8;
     if (nsnr > 96)
         nsnr = 96;
 
