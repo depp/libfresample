@@ -7,7 +7,7 @@ lfr_resample_s16n1s16_scalar(
     void *out, int outlen, const void *in, int inlen,
     const struct lfr_filter *filter)
 {
-    int i, j, acc, f, b, fn, ff0, ff1, off, flen;
+    int i, j, acc, f, log2nfilt, fn, ff0, ff1, off, flen, fidx0, fidx1;
     const short *fd, *inp = in;
     short *outp = out;
     lfr_fixed_t x;
@@ -15,25 +15,32 @@ lfr_resample_s16n1s16_scalar(
 
     fd = filter->data;
     flen = filter->nsamp;
-    b = filter->log2nfilt;
+    log2nfilt = filter->log2nfilt;
     x = *pos;
     ds = *dither;
 
     for (i = 0; i < outlen; ++i) {
-        /* acc: FIR accumulator */
-        acc = 0;
         /* fn: filter number
            ff0: filter factor for filter fn
            ff1: filter factor for filter fn+1 */
-        fn = (((unsigned) x >> 1) >> (31 - b)) & ((1u << b) - 1);
-        ff1 = ((unsigned) x >> (32 - b - INTERP_BITS)) &
+        fn = (((unsigned) x >> 1) >> (31 - log2nfilt)) &
+            ((1u << log2nfilt) - 1);
+        ff1 = ((unsigned) x >> (32 - log2nfilt - INTERP_BITS)) &
             ((1u << INTERP_BITS) - 1);
         ff0 = (1u << INTERP_BITS) - ff1;
+
         /* off: offset in input corresponding to first sample in filter */
         off = (int) (x >> 32) - (flen >> 1);
-        for (j = 0; j < flen; ++j) {
-            if (j + off < 0 || j + off >= inlen)
-                continue;
+        /* fidx0, fidx1: start, end indexes in FIR data */
+        fidx0 = -off;
+        if (fidx0 < 0)
+            fidx0 = 0;
+        fidx1 = inlen - off;
+        if (fidx1 > flen)
+            fidx1 = flen;
+
+        acc = 0;
+        for (j = fidx0; j < fidx1; ++j) {
             f = (fd[(fn+0) * flen + j] * ff0 +
                  fd[(fn+1) * flen + j] * ff1) >> INTERP_BITS;
             acc += inp[j + off] * f;
