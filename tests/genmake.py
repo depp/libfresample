@@ -44,28 +44,33 @@ make.write(
     'FR := ../build/product/fresample',
     'SOX := sox')
 
-def test_sweep(depth, rate1, rate2):
-    inpath = 'sweep_%dk%d.wav' % (rate1 // 1000, depth)
-    make.build(
-        inpath, ['Makefile'],
-        '$(SOX) -b %d -r %d -n $@ synth 8 sine 0+%d vol 0.999' %
-        (depth, rate1, rate1//2))
+def test_sweep(depth, nchan, rate1, rate2):
+    name = 'sweep_r%ds%dn%d' % (rate1 // 1000, depth, nchan)
+    if nchan == 1:
+        cmd = 'synth 8 sine 0+%d' % (rate1 // 2)
+    else:
+        cmd = 'synth 8 sine 0+%d sine %d+0' % (rate1 // 2, rate1 // 2)
+    cmd = '$(SOX) -b %d -r %d -n $@ %s vol 0.999' % (depth, rate1, cmd)
+    make.build(name + '.wav', ['Makefile'], cmd)
     sweeps = []
     for q in range(11):
-        outpath = 'sweep_%dk%d_%dk%02dq' % \
-                  (rate1 // 1000, depth, rate2/1000, q)
+        name2 = '%s_r%dq%02d' % (name, rate2 // 1000, q);
         make.build(
-            outpath + '.wav', [inpath, '$(FR)', 'Makefile'],
+            name2 + '.wav', [name + '.wav', '$(FR)', 'Makefile'],
             '$(FR) -q %d -r %d $< $@' % (q, rate2))
         make.build(
-            outpath + '.png', [outpath + '.wav', 'Makefile'],
+            name2 + '.png', [name2 + '.wav', 'Makefile'],
             'sox $< -n spectrogram -w kaiser -o $@')
-        sweeps.append(outpath + '.png')
-    make.phony('sweep', sweeps);
+        sweeps.append(name2 + '.png')
+    make.phony('sweep-mono' if nchan == 1 else 'sweep-stereo', sweeps);
 
-test_sweep(16, 96000, 44100)
-test_sweep(16, 96000, 48000)
-test_sweep(16, 48000, 44100)
+test_sweep(16, 1, 96000, 44100)
+test_sweep(16, 1, 96000, 48000)
+test_sweep(16, 1, 48000, 44100)
+test_sweep(16, 2, 96000, 44100)
+test_sweep(16, 2, 96000, 48000)
+test_sweep(16, 2, 48000, 44100)
+make.phony('sweep', ['sweep-mono', 'sweep-stereo'])
 
 def test_correct(depth, rate1, rate2):
     inpath = 'correct_%dk%d.wav' % (rate1 // 1000, depth)
