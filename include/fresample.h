@@ -6,42 +6,29 @@
 extern "C" {
 #endif
 
-#define LFR_RESTRICT
 #define LFR_PUBLIC
 #if defined(LFR_IMPLEMENTATION)
 # define LFR_PRIVATE
 #endif
 
 #if defined(_MSC_VER)
-# undef LFR_RESTRICT
-# define LFR_RESTRICT __restrict
 # define LFR_INT64 __int64
 #endif
 
 #if defined(__GNUC__)
-# undef LFR_RESTRICT
-# define LFR_RESTRICT __restrict
 # undef LFR_PRIVATE
 # undef LFR_PUBLIC
 # if defined(LFR_IMPLEMENTATION)
+#  define LFR_PRIVATE __attribute__((visibility("hidden")))
 #  if defined(__ELF__)
-#   define LFR_PRIVATE __attribute__((visibility("internal")))
 #   define LFR_PUBLIC __attribute__((visibility("protected")))
 #  else
-#   define LFR_PRIVATE __attribute__((visibility("hidden")))
 #   define LFR_PUBLIC __attribute__((visibility("default")))
 #  endif
 # else
 #  define LFR_PUBLIC
 # endif
 # define LFR_INT64 long long
-#endif
-
-#if defined(__STDC_VERSION__)
-# if __STDC_VERSION__ >= 199901L
-#  undef LFR_RESTRICT
-#  define LFR_RESTRICT restrict
-# endif
 #endif
 
 #if defined(_M_X64) || defined(__x86_64__)
@@ -81,6 +68,10 @@ extern "C" {
 # endif
 #endif
 
+/* ========================================
+   CPU features
+   ======================================== */
+
 /*
   CPU features to use or disable.
 */
@@ -113,6 +104,9 @@ enum {
     LFR_CPUF_ALL = 0xffffffffu
 };
 
+/*
+  Information about a CPU flag.
+*/
 struct lfr_cpuf {
     char name[8];
     unsigned flag;
@@ -137,6 +131,10 @@ LFR_PUBLIC extern const struct lfr_cpuf LFR_CPUF[];
 */
 LFR_PUBLIC unsigned
 lfr_setcpufeatures(unsigned flags);
+
+/* ========================================
+   Sample formats
+   ======================================== */
 
 /*
   Audio sample formats.
@@ -173,15 +171,194 @@ typedef enum {
 LFR_PUBLIC void
 lfr_swap16(void *dest, const void *src, size_t count);
 
+/* ========================================
+   Resampling parameters
+   ======================================== */
+
 /*
   Names for filter quality presets.
 */
 enum {
-    LFR_QUALITY_LOW,
-    LFR_QUALITY_MEDIUM,
-    LFR_QUALITY_HIGH,
-    LFR_QUALITY_ULTRA
+    LFR_QUALITY_LOW = 0,
+    LFR_QUALITY_MEDIUM = 4,
+    LFR_QUALITY_HIGH = 8,
+    LFR_QUALITY_ULTRA = 10
 };
+
+/*
+  Parameters for the filter generator.
+
+  Filter generation goes through two stages.
+
+  1. In the first stage, the resampling parameters are used to create
+  a filter specification.  The filter specification consists of
+  normalized frequencies for the pass band, stop band, and stop band
+  attenuation.  This stage uses simple logic to create a filter
+  specification that "makes sense" for any input.  It relaxes the
+  filter specification for ultrasonic (inaudible) frequencies and
+  ensures that enough of the input signal passes through.
+
+  2. In the second stage, an FIR filter is generated that fits the
+  filter specified by the first stage.
+
+  Normally, for resampling, you will specify QUALITY, INRATE, and
+  OUTRATE.  A filter specification for the conversion will be
+  automatically generated with the given subjective quality level.
+
+  If you are a signal-processing guru, you can create the filter
+  specification directly by setting FPASS, FSTOP, and ATTEN.
+*/
+typedef enum {
+    /*
+      High level filter parameters.  These are typically the only
+      parameters you will need to set.
+    */
+
+    /* Filter quality, default 8.  An integer between 0 and 10 which
+       determines the default values for other parameters.  */
+    LFR_PARAM_QUALITY,
+
+    /* Input sample rate, in Hz.  The default is -1, which creates a
+       generic filter.  */
+    LFR_PARAM_INRATE,
+
+    /* Output sample rate.  If the input sample rate is specified,
+       then this is measured in Hz.  Otherwise, if the input rate is
+       -1, then this value is relative to the input sample rate (so
+       you would use 0.5 for downsampling by a factor of two).
+       Defaults to the same value as the input sample rate, which
+       creates a filter which can be used for upsampling at any ratio.
+       Note that increasing the output rate above the input rate has
+       no effect, all upsampling filters for a given input frequency
+       are identical.  */
+    LFR_PARAM_OUTRATE,
+
+    /*
+      Medium level filter parameters.  These parameters affect how the
+      filter specification is generated from the input and output
+      sample rates.  Most of these parameters have default values
+      which depend on the QUALITY setting.
+    */
+
+    /* The width of the filter transition band, as a fraction of the
+       input sample rate.  This value will be enlarged to extend the
+       transition band to MAXFREQ and will be narrowed to extend the
+       pass band to MINBW.  The default value depends on the QUALITY
+       setting, and gets narrower as QUALITY increases.  */
+    LFR_PARAM_FTRANSITION,
+
+    /* Maximum audible frequency.  The pass band will be narrowed to
+       fit within the range of audible frequencies.  Default value is
+       20 kHz if the input frequency is set, otherwise this parameter
+       is unused.  If you want to preserve ultrasonic frequencies,
+       disable this parameter by setting it to -1.  */
+    LFR_PARAM_MAXFREQ,
+
+    /* A flag which allows aliasing noise as long as it is above
+       MAXFREQ.  This flag improves the subjective quality of
+       low-quality filters by increasing their bandwidth, but causes
+       problems for high-quality filters by increasing noise.  Default
+       value depends on QUALITY setting, and is set for low QUALITY
+       values.  Has no effect if MAXFREQ is disabled.  */
+    LFR_PARAM_LOOSE,
+
+    /* Minimum size of pass band, as a fraction of the output
+       bandwidth.  This prevents the filter designer from filtering
+       out the entire signal, which can happen when downsampling by a
+       large enough ratio.  The default value is 0.5 at low quality
+       settings, and higher at high quality settings.  The filter size
+       can increase dramatically as this number approaches 1.0.  */
+    LFR_PARAM_MINFPASS,
+
+    /*
+      Filter specification.  These parameters are normally generated
+      from the higher level parameters.  If the filter specification
+      is set, then the higher level parameters will all be ignored.
+    */
+
+    /* The end of the pass band, as a fraction of the input sample
+       rate.  Normally, the filter designer chooses this value.  */
+    LFR_PARAM_FPASS,
+
+    /* The start of the stop band, as a fraction of the input sample
+       rate.  Normally, the filter designer chooses this value.  */
+    LFR_PARAM_FSTOP,
+
+    /* Desired stop band attenuation, in dB.  Larger numbers are
+       increase filter quality.  Default value depends on the QUALITY
+       setting.  */
+    LFR_PARAM_ATTEN
+} lfr_param_t;
+
+#define LFR_PARAM_COUNT ((int) LFR_PARAM_ATTEN + 1)
+
+/*
+  Get the name of a parameter, or return NULL if the paramater does
+  not exist.
+*/
+LFR_PUBLIC const char *
+lfr_param_name(lfr_param_t pname);
+
+/*
+  Get the index of a parameter by name, or return -1 if the parameter
+  does not exist.
+*/
+LFR_PUBLIC int
+lfr_param_lookup(const char *pname, size_t len);
+
+/*
+  A set of filter parameters.
+*/
+struct lfr_param;
+
+/*
+  Create a new filter parameter set.  Returns NULL if out of memory.
+*/
+LFR_PUBLIC struct lfr_param *
+lfr_param_new(void);
+
+/*
+  Free a filter parameter set.
+*/
+LFR_PUBLIC void
+lfr_param_free(struct lfr_param *param);
+
+/*
+  Duplicate a filter parameter set.  Returns NULL if out of memory.
+*/
+LFR_PUBLIC struct lfr_param *
+lfr_param_copy(struct lfr_param *param);
+
+/*
+  Set an integer-valued parameter.
+*/
+LFR_PUBLIC void
+lfr_param_seti(struct lfr_param *param, lfr_param_t pname, int value);
+
+/*
+  Set a float-valued parameter.
+*/
+LFR_PUBLIC void
+lfr_param_setf(struct lfr_param *param, lfr_param_t pname, double value);
+
+/*
+  Get the value of a parameter as an integer.  This will compute the
+  parameter value if necessary.
+*/
+LFR_PUBLIC void
+lfr_param_geti(struct lfr_param *param, lfr_param_t pname, int *value);
+
+/*
+  Get the value of a parameter as a floating-point number, or -1 if
+  the parameter is unset.  This will compute the parameter value if
+  necessary.
+*/
+LFR_PUBLIC void
+lfr_param_getf(struct lfr_param *param, lfr_param_t pname, double *value);
+
+/* ========================================
+   Resampling
+   ======================================== */
 
 /*
   A 32.32 fixed point number.  This is used for expressing fractional
@@ -195,102 +372,33 @@ enum {
 typedef LFR_INT64 lfr_fixed_t;
 
 /*
-  A low-pass filter for resampling 16-bit integer audio.
+  A filter for resampling audio.
 */
-struct lfr_s16;
+struct lfr_filter;
+
+/*
+  Create a low-pass filter with the given parameters.
+*/
+LFR_PUBLIC void
+lfr_filter_new(struct lfr_filter **fpp, struct lfr_param *param);
 
 /*
   Free a low-pass filter.
 */
 LFR_PUBLIC void
-lfr_s16_free(struct lfr_s16 *fp);
+lfr_filter_free(struct lfr_filter *fp);
 
 /*
-  Create a new windowed sinc filter with the given parameters.
-  Normally this function is not called directly.
+  Resample an audio buffer.  Note that this function may need to
+  create intermediate buffers if there is no function which can
+  directly operate on the input and output formats.  No intermediate
+  buffers will be necessary if the following conditions are met:
 
-  nsamp: filter size, in samples
+  - Input and output formats are identical.
 
-  log2nfilt: base 2 logarithm of the number of filters
+  - Sample format is either S16_NATIVE or F32_NATIVE.
 
-  cutoff: cutoff frequency, in cycles per sample
-
-  beta: Kaiser window beta parameter
-
-  Returns NULL when out of memory.
-*/
-LFR_PUBLIC struct lfr_s16 *
-lfr_s16_new_sinc(
-    int nsamp, int log2nfilt, double cutoff, double beta);
-
-/*
-  Create a new low-pass filter for 16-bit data with the given
-  parameters: sample rate, pass band frequency, stop band frequency,
-  and signal to noise ratio.  Frequencies are measured in Hz, the SNR
-  is measured in dB.  The SNR is clipped at 96 due to limitations when
-  working with 16-bit data.  Normally, this function is not called
-  directly.
-
-  Returns NULL when out of memory.
-
-  This function works by calling lfr_s16_new_sinc().
-*/
-LFR_PUBLIC struct lfr_s16 *
-lfr_s16_new_lowpass(
-    double f_rate, double f_pass,
-    double f_stop, double snr);
-
-/*
-  Create a new low-pass filter for 16-bit data for resampling with the
-  given parameters: input sample rate, output sample rate, signal to
-  noise ratio, transition width, and "loose" flag.
-
-  The input and output frequencies are measured in Hz.
-
-  The signal to noise ratio is measured in dB, and clipped at 96 dB
-  due to limitations when working with 16-bit data.
-
-  The transition width is specified as a fraction of the input sample
-  rate.  This allows controlling the trade-off between bandwidth and
-  filter size.  Note that the transition band will be narrowed
-  (increasing filter size) to ensure that the pass band is at least
-  50% of the input or output bandwidth, whichever is smaller.  The
-  transition band will also be widened (reducing filter size) to limit
-  the pass band to 20 kHz, as there's no sense in wasting CPU cycles
-  to preserve ultrasonic frequencies.
-
-  The "loose" flag, when set, allows the stop band to start at higher
-  frequencies.  This will create ultrasonic artifacts above the noise
-  floor.  Most people probably won't hear them, but some people have
-  better hearing, and poor audio systems can modulate ultrasonics to
-  audible frequencies.
-
-  Returns NULL when out of memory.
-
-  This function works by calling lfr_s16_new_lowpass().
-*/
-LFR_PUBLIC struct lfr_s16 *
-lfr_s16_new_resample(
-    int f_inrate, int f_outrate,
-    double snr, double transition, int loose);
-
-/*
-  Create a new low-passs filter for 16-bit data for resampling between
-  the given sample rates.  The filter quality is an integer in the
-  range 0..3 which specifies the filter quality.  Quality levels 2 and
-  3 are considered high quality.  The predefined LFR_QUALITY constants
-  can be used here.
-
-  Returns NULL when out of memory.
-
-  This function works by calling lfr_s16_new_resample().
-*/
-LFR_PUBLIC struct lfr_s16 *
-lfr_s16_new_preset(
-    int f_inrate, int f_outrate, int quality);
-
-/*
-  Resample 16-bit integer audio.
+  - The number of channels is either 1 (mono) or 2 (stereo).
 
   pos: Current position relative to the start of the input buffer,
   expressed as a 32.32 fixed point number.  On return, this will
@@ -304,6 +412,8 @@ lfr_s16_new_preset(
 
   dither: State of the PRNG used for dithering.
 
+  nchan: Number of interleaved channels.
+
   out, in: Input and output buffers.  The buffers are not permitted to
   alias each other.
 
@@ -311,25 +421,18 @@ lfr_s16_new_preset(
   type is 'int' instead of 'size_t'; this matches the precision of
   buffer positions.
 
+  outfmt, infmt: Format of input and output buffers.
+
   filter: A suitable low-pass filter for resampling at the given
   ratio.
 */
-
 LFR_PUBLIC void
-lfr_s16_resample_mono(
-    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
-    unsigned *dither,
-    short *LFR_RESTRICT out, int outlen,
-    const short *LFR_RESTRICT in, int inlen,
-    const struct lfr_s16 *LFR_RESTRICT filter);
-
-LFR_PUBLIC void
-lfr_s16_resample_stereo(
-    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
-    unsigned *dither,
-    short *LFR_RESTRICT out, int outlen,
-    const short *LFR_RESTRICT in, int inlen,
-    const struct lfr_s16 *LFR_RESTRICT filter);
+lfr_resample(
+    lfr_fixed_t *pos, lfr_fixed_t inv_ratio,
+    unsigned *dither, int nchan,
+    void *out, lfr_fmt_t outfmt, int outlen,
+    const void *in, lfr_fmt_t infmt, int inlen,
+    const struct lfr_filter *filter);
 
 #ifdef __cplusplus
 }

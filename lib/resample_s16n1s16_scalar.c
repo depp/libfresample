@@ -1,16 +1,15 @@
 /* Copyright 2012 Dietrich Epp <depp@zdome.net> */
-#include "s16.h"
+#include "resample.h"
 
 void
-lfr_s16_resample_mono_scalar(
-    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
-    unsigned *dither,
-    short *LFR_RESTRICT out, int outlen,
-    const short *LFR_RESTRICT in, int inlen,
-    const struct lfr_s16 *LFR_RESTRICT filter)
+lfr_resample_s16n1s16_scalar(
+    lfr_fixed_t *pos, lfr_fixed_t inv_ratio, unsigned *dither,
+    void *out, int outlen, const void *in, int inlen,
+    const struct lfr_filter *filter)
 {
     int i, j, acc, f, b, fn, ff0, ff1, off, flen;
-    const short *fd;
+    const short *fd, *inp = in;
+    short *outp = out;
     lfr_fixed_t x;
     unsigned ds;
 
@@ -37,7 +36,7 @@ lfr_s16_resample_mono_scalar(
                 continue;
             f = (fd[(fn+0) * flen + j] * ff0 +
                  fd[(fn+1) * flen + j] * ff1) >> INTERP_BITS;
-            acc += in[j + off] * f;
+            acc += inp[j + off] * f;
         }
         acc += (int) (ds >> 17);
         acc >>= 15;
@@ -45,7 +44,7 @@ lfr_s16_resample_mono_scalar(
             acc = 0x7fff;
         else if (acc < -0x8000)
             acc = -0x8000;
-        out[i] = acc;
+        outp[i] = acc;
 
         x += inv_ratio;
         ds = LCG_A * ds + LCG_C;

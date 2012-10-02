@@ -3,7 +3,7 @@
 #include <stdlib.h>
 
 void
-lfr_s16_free(struct lfr_s16 *fp)
+lfr_filter_free(struct lfr_filter *fp)
 {
     free(fp);
 }

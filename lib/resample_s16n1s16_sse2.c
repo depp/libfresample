@@ -3,7 +3,7 @@
 
 #include "cpu.h"
 #if defined(LFR_CPU_X86)
-#include "s16.h"
+#include "resample.h"
 #include <stdint.h>
 
 #define UNALIGNED_LOAD 1
@@ -55,12 +55,10 @@
     }
 
 void
-lfr_s16_resample_mono_sse2(
-    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
-    unsigned *dither,
-    short *LFR_RESTRICT out, int outlen,
-    const short *LFR_RESTRICT in, int inlen,
-    const struct lfr_s16 *LFR_RESTRICT filter)
+lfr_resample_s16n1s16_sse2(
+    lfr_fixed_t *pos, lfr_fixed_t inv_ratio, unsigned *dither,
+    void *out, int outlen, const void *in, int inlen,
+    const struct lfr_filter *filter)
 {
     const __m128i *firp, *inp;
     __m128i *outp;
@@ -94,13 +92,13 @@ lfr_s16_resample_mono_sse2(
        aligned input pointer.  inp: aligned input pointer.  */
     in0 = ((uintptr_t) in >> 1) & 7;
     in1 = inlen + in0;
-    inp = (const __m128i *) (in - in0);
+    inp = (const __m128i *) ((const char *) in - in0 * 2);
 
     /* out0, out1: Sample index of output start and end, measured from
        aligned output pointer.  outp: aligned output pointer.  */
     out0 = ((uintptr_t) out >> 1) & 7;
     out1 = outlen + out0;
-    outp = (__m128i *) (out - out0);
+    outp = (__m128i *) ((char *) out - out0 * 2);
 
     x = *pos + ((lfr_fixed_t) in0 << 32);
     ds = *dither;

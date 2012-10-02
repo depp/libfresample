@@ -3,7 +3,7 @@
 
 #include "cpu.h"
 #if defined(LFR_CPU_PPC)
-#include "s16.h"
+#include "resample.h"
 #include <stdint.h>
 
 #define UNALIGNED_LOAD 1
@@ -24,10 +24,20 @@
                 vec_mergel(fir0, fir1), \
                 fir_interp,             \
                 zero),                  \
-            fir_shift))
+            fir_shift));                \
+                                        \
+    fir1 = vec_mergel(fir0, fir0);      \
+    fir0 = vec_mergeh(fir0, fir0)
 
 #define LOOP_ACCUM \
-    acc = vec_msum(dat0, fir0, acc)
+    acc_a = vec_msum(           \
+        vec_mergeh(dat0, dat1), \
+        vec_mergeh(fir0, fir1), \
+        acc_a);                 \
+    acc_b = vec_msum(           \
+        vec_mergel(dat0, dat1), \
+        vec_mergel(fir0, fir1), \
+        acc_b)
 
 static __inline void
 lfr_storepartial0_vec16(vector signed short x, int b,
@@ -58,12 +68,10 @@ lfr_storepartial1_vec16(vector signed short x, int b,
 }
 
 void
-lfr_s16_resample_mono_altivec(
-    lfr_fixed_t *LFR_RESTRICT pos, lfr_fixed_t inv_ratio,
-    unsigned *dither,
-    short *LFR_RESTRICT out, int outlen,
-    const short *LFR_RESTRICT in, int inlen,
-    const struct lfr_s16 *LFR_RESTRICT filter)
+lfr_resample_s16n2s16_altivec(
+    lfr_fixed_t *pos, lfr_fixed_t inv_ratio, unsigned *dither,
+    void *out, int outlen, const void *in, int inlen,
+    const struct lfr_filter *filter)
 {
     const vector signed short *firp, *inp;
     vector signed short *outp;
@@ -74,14 +82,14 @@ lfr_s16_resample_mono_altivec(
     vector unsigned char perm_hi64 =
         { 0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23 };
     vector unsigned char perm_lo64, load_perm;
-    vector signed short fir0, fir1, fir_interp, dat0, dat1, acc_r;
+    vector signed short fir0, fir1, fir_interp, dat0, dat1, dat2, acc_r;
     vector unsigned int acc_shift, fir_shift;
-    vector signed int acc, acc0, acc1, acc2, zero;
+    vector signed int acc_a, acc_b, acc, acc0, acc1, zero;
     vector unsigned int dsv;
     vector unsigned int lcg_a = { LCG_A4, LCG_A4, LCG_A4, LCG_A4 };
     vector unsigned int lcg_c = { LCG_C4, LCG_C4, LCG_C4, LCG_C4 };
     int fn, ff0, ff1, off0, off, fidx0, fidx1;
-    int accs, i, f, t;
+    int accs0, accs1, i, f, t;
     unsigned ds;
 
     union {
@@ -99,45 +107,44 @@ lfr_s16_resample_mono_altivec(
     firp = (const vector signed short *) filter->data;
     /* flen: Length of filter, measured in 128-bit words.  */
     flen = filter->nsamp >> 3;
-    off0 = filter->nsamp >> 1;
+    off0 = (filter->nsamp >> 1);
     /* log2nfilt: Base 2 logarithm of the number of filters.  */
     log2nfilt = filter->log2nfilt;
 
     /* in0, in1: Frame index of input start and end, measured from
        aligned input pointer.  inp: aligned input pointer.  */
-    in0 = ((uintptr_t) in >> 1) & 7;
+    in0 = ((uintptr_t) in >> 2) & 3;
     in1 = inlen + in0;
-    inp = (const vector signed short *) (in - in0);
+    inp = (const vector signed short *) ((const char *) in - in0 * 4);
 
     /* out0, out1: Frame index of output start and end, measured from
        aligned output pointer.  outp: aligned output pointer.  */
-    out0 = ((uintptr_t) out >> 1) & 7;
+    out0 = ((uintptr_t) out >> 2) & 3;
     out1 = outlen + out0;
-    outp = (vector signed short *) (out - out0);
+    outp = (vector signed short *) ((char *) out - out0 * 4);
 
     x = *pos + ((lfr_fixed_t) in0 << 32);
     ds = *dither;
-    for (i = 0; i < (out0 & 7); ++i)
+    for (i = 0; i < (out0 & 3) * 2; ++i)
         ds = LCG_AI * ds + LCG_CI;
     for (i = 0; i < 4; ++i) {
         un.w[i] = ds;
-        ds = ds * LCG_A + LCG_C;
+        ds = LCG_A * ds + LCG_C;
     }
     dsv = un.x;
 
-    un.w[1] = 0;
     un.w[2] = 0;
     un.w[3] = 0;
 
     acc0 = vec_splat_s32(0);
     acc1 = vec_splat_s32(0);
-    acc2 = vec_splat_s32(0);
     for (outidx = out0; outidx < out1; ++outidx) {
         /* acc: FIR accumulator, used for accumulating 32-bit values
            in the format L R L R.  This corresponds to one frame of
            output, so the pair of values for left and the pair for
            right have to be summed later.  */
-        acc = vec_splat_s32(0);
+        acc_a = vec_splat_s32(0);
+        acc_b = vec_splat_s32(0);
 
         /* fn: filter number
            ff0: filter factor for filter fn
@@ -161,98 +168,100 @@ lfr_s16_resample_mono_altivec(
         fidx0 = (in0 - off + 7) >> 3;
         fidx1 = (in1 - off) >> 3;
         if (fidx0 > 0) {
-            if (fidx0 > flen)
+            if (fidx0 > flen) {
+                acc = vec_splat_s32(0);
                 goto accumulate;
-            accs = 0;
+            }
+            accs0 = 0;
+            accs1 = 0;
             t = (off > in0) ? off : in0;
             for (i = t; i < fidx0 * 8 + off; ++i) {
                 f = (((const short *) firp)[(fn+0)*flen*8 + i - off] * ff0 +
                      ((const short *) firp)[(fn+1)*flen*8 + i - off] * ff1)
                     >> INTERP_BITS;
-                accs += ((const short *) inp)[i] * f;
+                accs0 += ((const short *) inp)[i*2+0] * f;
+                accs1 += ((const short *) inp)[i*2+1] * f;
             }
-            un.w[0] = accs;
-            acc = un.x;
+            un.w[0] = accs0;
+            un.w[1] = accs1;
+            acc_a = un.x;
         } else {
             fidx0 = 0;
         }
         if (fidx1 < flen) {
-            if (fidx1 < 0)
+            if (fidx1 < 0) {
+                acc = vec_splat_s32(0);
                 goto accumulate;
-            accs = 0;
+            }
+            accs0 = 0;
+            accs1 = 0;
             t = (off + flen*8 < in1) ? (off + flen*8) : in1;
             for (i = fidx1 * 8 + off; i < t; ++i) {
                 f = (((const short *) firp)[(fn+0)*flen*8 + i - off] * ff0 +
                      ((const short *) firp)[(fn+1)*flen*8 + i - off] * ff1)
                     >> INTERP_BITS;
-                accs += ((const short *) inp)[i] * f;
+                accs0 += ((const short *) inp)[i*2+0] * f;
+                accs1 += ((const short *) inp)[i*2+1] * f;
             }
-            un.w[0] = accs;
-            acc = vec_add(acc, un.x);
+            un.w[0] = accs0;
+            un.w[1] = accs1;
+            acc_b = un.x;
         } else {
             fidx1 = flen;
         }
 
-        if (off & 7) {
-            load_perm = vec_lvsl(off * 2, (unsigned char *) 0);
-            dat1 = inp[(off >> 3) + fidx0];
+        if (off & 3) {
+            load_perm = vec_lvsl(off * 4, (unsigned char *) 0);
+            dat2 = inp[(off >> 2) + fidx0*2];
             for (i = fidx0; i < fidx1; ++i) {
-                dat0 = dat1;
-                dat1 = inp[(off >> 3) + i + 1];
+                dat0 = dat2;
+                dat1 = inp[(off >> 2) + i*2 + 1];
+                dat2 = inp[(off >> 2) + i*2 + 2];
                 dat0 = vec_perm(dat0, dat1, load_perm);
+                dat1 = vec_perm(dat1, dat2, load_perm);
                 LOOP_LOADFIR;
                 LOOP_ACCUM;
             }
         } else {
             for (i = fidx0; i < fidx1; ++i) {
-                dat0 = inp[(off >> 3) + i];
+                dat0 = inp[(off >> 2) + i*2 + 0];
+                dat1 = inp[(off >> 2) + i*2 + 1];
                 LOOP_LOADFIR;
                 LOOP_ACCUM;
             }
         }
+        acc = vec_add(acc_a, acc_b);
 
     accumulate:
-        switch (outidx & 7) {
-        case 0: case 2: case 4: case 6:
+        switch (outidx & 3) {
+        case 0: case 2:
             acc0 = acc;
             break;
 
-        case 1: case 5:
+        case 1:
             acc1 = vec_add(
-                vec_mergeh(acc0, acc),
-                vec_mergel(acc0, acc));
+                vec_perm(acc0, acc, perm_hi64),
+                vec_perm(acc0, acc, perm_lo64));
             break;
 
         case 3:
             acc0 = vec_add(
-                vec_mergeh(acc0, acc),
-                vec_mergel(acc0, acc));
-            acc2 = vec_add(
-                vec_perm(acc1, acc0, perm_hi64),
-                vec_perm(acc1, acc0, perm_lo64));
-            break;
+                vec_perm(acc0, acc, perm_hi64),
+                vec_perm(acc0, acc, perm_lo64));
 
-        case 7:
-            acc0 = vec_add(
-                vec_mergeh(acc0, acc),
-                vec_mergel(acc0, acc));
-            acc1 = vec_add(
-                vec_perm(acc1, acc0, perm_hi64),
-                vec_perm(acc1, acc0, perm_lo64));
-
-            acc2 = vec_add(
-                acc2,
-                (vector signed int) vec_sr(dsv, vec_splat_u32(17-32)));
-            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
             acc1 = vec_add(
                 acc1,
                 (vector signed int) vec_sr(dsv, vec_splat_u32(17-32)));
             dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
+            acc0 = vec_add(
+                acc0,
+                (vector signed int) vec_sr(dsv, vec_splat_u32(17-32)));
+            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
 
             acc_r = vec_packs(
-                vec_sra(acc2, acc_shift),
-                vec_sra(acc1, acc_shift));
-            if (outidx - out0 >= 7)
+                vec_sra(acc1, acc_shift),
+                vec_sra(acc0, acc_shift));
+            if (outidx - out0 >= 3)
                 *outp = acc_r;
             else
                 lfr_storepartial0_vec16(acc_r, out0 * 2, outp);
@@ -271,52 +280,41 @@ lfr_s16_resample_mono_altivec(
     *dither = ds;
 
     /* Store remaing bytes */
-    if ((outidx & 7) == 0)
+    if ((outidx & 3) == 0)
         return;
     acc = vec_splat_s32(0);
     for (; ; ++outidx) {
-        switch (outidx & 7) {
-        case 0: case 2: case 4: case 6:
+        switch (outidx & 3) {
+        case 0: case 2:
             acc0 = acc;
             break;
 
-        case 1: case 5:
+        case 1:
             acc1 = vec_add(
-                vec_mergeh(acc0, acc),
-                vec_mergel(acc0, acc));
+                vec_perm(acc0, acc, perm_hi64),
+                vec_perm(acc0, acc, perm_lo64));
             break;
 
         case 3:
             acc0 = vec_add(
-                vec_mergeh(acc0, acc),
-                vec_mergel(acc0, acc));
-            acc2 = vec_add(
-                vec_perm(acc1, acc0, perm_hi64),
-                vec_perm(acc1, acc0, perm_lo64));
-            break;
+                vec_perm(acc0, acc, perm_hi64),
+                vec_perm(acc0, acc, perm_lo64));
 
-        case 7:
-            acc0 = vec_add(
-                vec_mergeh(acc0, acc),
-                vec_mergel(acc0, acc));
-            acc1 = vec_add(
-                vec_perm(acc1, acc0, perm_hi64),
-                vec_perm(acc1, acc0, perm_lo64));
-
-            acc2 = vec_add(
-                acc2,
-                (vector signed int) vec_sr(dsv, vec_splat_u32(17-32)));
-            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
             acc1 = vec_add(
                 acc1,
                 (vector signed int) vec_sr(dsv, vec_splat_u32(17-32)));
+            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
+            acc0 = vec_add(
+                acc0,
+                (vector signed int) vec_sr(dsv, vec_splat_u32(17-32)));
+            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
 
             acc_r = vec_packs(
-                vec_sra(acc2, acc_shift),
-                vec_sra(acc1, acc_shift));
-            lfr_storepartial1_vec16(acc_r, out1, outp);
+                vec_sra(acc1, acc_shift),
+                vec_sra(acc0, acc_shift));
+            lfr_storepartial1_vec16(acc_r, out1 * 2, outp);
             return;
-        }
+       }
     }
 }
 

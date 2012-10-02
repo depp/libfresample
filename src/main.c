@@ -102,21 +102,24 @@ int
 main(int argc, char *argv[])
 {
     long v, benchmark, bi;
-    int rate, opt, quality, nfiles;
+    int rate, opt, nfiles;
     size_t len;
     struct file_data din;
     struct audio ain, aout;
     char frate[AUDIO_RATE_FMTLEN], fnchan[32], *e, *files[2];
-    struct lfr_s16 *fp;
+    struct lfr_filter *fp;
+    struct lfr_param *param;
     FILE *file;
     clock_t t0, t1;
     lfr_fixed_t pos, inv_ratio;
     unsigned dither;
 
+    param = lfr_param_new();
+    if (!param)
+        error("out of memory");
     benchmark = -1;
     nfiles = 0;
     rate = -1;
-    quality = -1;
     while ((opt = getopt(argc, argv, ":b:c:hq:r:v")) != -1) {
         switch (opt) {
         case 'b':
@@ -142,9 +145,9 @@ main(int argc, char *argv[])
                 fprintf(stderr, "error: invalid quality '%s'\n", optarg);
                 return 1;
             }
-            if (v > 3) v = 3;
+            if (v > 10) v = 10;
             else if (v < 0) v = 0;
-            quality = (int) v;
+            lfr_param_seti(param, LFR_PARAM_QUALITY, (int) v);
             break;
 
         case 'r':
@@ -185,8 +188,6 @@ main(int argc, char *argv[])
         fputs("error: no rate specified\n", stderr);
         return 1;
     }
-    if (quality < 0)
-        quality = 3;
 
     file_read(&din, files[0]);
 
@@ -218,56 +219,34 @@ main(int argc, char *argv[])
 
         inv_ratio =
             (((lfr_fixed_t) ain.rate << 32) + aout.rate / 2) / aout.rate;
+        lfr_param_seti(param, LFR_PARAM_INRATE, ain.rate);
+        lfr_param_seti(param, LFR_PARAM_OUTRATE, aout.rate);
+        fp = NULL;
+        lfr_filter_new(&fp, param);
+        if (!fp)
+            error("could not create filter");
 
-        fp = lfr_s16_new_preset(ain.rate, aout.rate, quality);
-
-        if (ain.nchan == 1) {
-            pos = 0;
-            dither = DITHER_SEED;
-            lfr_s16_resample_mono(
-                &pos, inv_ratio, &dither,
-                aout.alloc, aout.nframe,
-                ain.data, ain.nframe,
-                fp);
-
-            if (benchmark > 0) {
-                t0 = clock();
-                for (bi = 0; bi < benchmark; ++bi) {
-                    pos = 0;
-                    dither = DITHER_SEED;
-                    lfr_s16_resample_mono(
-                        &pos, inv_ratio, &dither,
-                        aout.alloc, aout.nframe,
-                        ain.data, ain.nframe,
-                        fp);
-                }
-                t1 = clock();
-            }
-        } else {
-            pos = 0;
-            dither = DITHER_SEED;
-            lfr_s16_resample_stereo(
-                &pos, inv_ratio, &dither,
-                aout.alloc, aout.nframe,
-                ain.data, ain.nframe,
-                fp);
-
-            if (benchmark > 0) {
-                t0 = clock();
-                for (bi = 0; bi < benchmark; ++bi) {
-                    pos = 0;
-                    dither = DITHER_SEED;
-                    lfr_s16_resample_stereo(
-                        &pos, inv_ratio, &dither,
-                        aout.alloc, aout.nframe,
-                        ain.data, ain.nframe,
-                        fp);
-                }
-                t1 = clock();
-            }
-        }
+        pos = 0;
+        dither = DITHER_SEED;
+        lfr_resample(
+            &pos, inv_ratio, &dither, ain.nchan,
+            aout.alloc, LFR_FMT_S16_NATIVE, aout.nframe,
+            ain.data, LFR_FMT_S16_NATIVE, ain.nframe,
+            fp);
 
         if (benchmark > 0) {
+            t0 = clock();
+            for (bi = 0; bi < benchmark; ++bi) {
+                pos = 0;
+                dither = DITHER_SEED;
+                lfr_resample(
+                    &pos, inv_ratio, &dither, ain.nchan,
+                    aout.alloc, LFR_FMT_S16_NATIVE, aout.nframe,
+                    ain.data, LFR_FMT_S16_NATIVE, ain.nframe,
+                    fp);
+            }
+            t1 = clock();
+
             printf("Average time: %g s\n"
                    "Speed: %g\n",
                    (t1 - t0) / ((double) CLOCKS_PER_SEC * benchmark),
@@ -275,7 +254,7 @@ main(int argc, char *argv[])
                    ((double) (t1 - t0) * ain.rate));
         }
 
-        lfr_s16_free(fp);
+        lfr_filter_free(fp);
 
         file_destroy(&din);
         audio_destroy(&ain);
@@ -291,6 +270,7 @@ main(int argc, char *argv[])
     file_destroy(&din);
     audio_destroy(&ain);
     audio_destroy(&aout);
+    lfr_param_free(param);
 
     return 0;
 }
