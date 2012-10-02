@@ -113,6 +113,7 @@ main(int argc, char *argv[])
     clock_t t0, t1;
     lfr_fixed_t pos, inv_ratio;
     unsigned dither;
+    double time, speed;
 
     param = lfr_param_new();
     if (!param)
@@ -197,8 +198,9 @@ main(int argc, char *argv[])
 
     audio_rate_format(frate, sizeof(frate), ain.rate);
     nchan_format(fnchan, sizeof(fnchan), ain.nchan);
-    printf("Input: %s, %s, %s, %zu samples\n",
-           audio_format_name(ain.fmt), frate, fnchan, ain.nframe);
+    fprintf(stderr,
+            "Input: %s, %s, %s, %zu samples\n",
+            audio_format_name(ain.fmt), frate, fnchan, ain.nframe);
 
     if (ain.nchan != 1 && ain.nchan != 2)
         error("unsupported number of channels "
@@ -213,8 +215,9 @@ main(int argc, char *argv[])
             (double) ain.nframe * (double) rate / (double) ain.rate + 0.5);
 
         audio_rate_format(frate, sizeof(frate), rate);
-        printf("Output: %s, %s, %s, %zu samples\n",
-               audio_format_name(ain.fmt), frate, fnchan, len);
+        fprintf(stderr,
+                "Output: %s, %s, %s, %zu samples\n",
+                audio_format_name(ain.fmt), frate, fnchan, len);
         audio_alloc(&aout, len, ain.fmt, ain.nchan, rate);
 
         inv_ratio =
@@ -247,11 +250,16 @@ main(int argc, char *argv[])
             }
             t1 = clock();
 
-            printf("Average time: %g s\n"
-                   "Speed: %g\n",
-                   (t1 - t0) / ((double) CLOCKS_PER_SEC * benchmark),
-                   ((double) CLOCKS_PER_SEC * benchmark * ain.nframe) /
-                   ((double) (t1 - t0) * ain.rate));
+            time = t1 - t0;
+            speed = 
+                ((double) CLOCKS_PER_SEC * benchmark * ain.nframe) /
+                (time * ain.rate);
+            fprintf(
+                stderr,
+                "Average time: %g s\n"
+                "Speed: %g\n",
+                (t1 - t0) / ((double) CLOCKS_PER_SEC * benchmark), speed);
+            printf("%.3f\n", speed);
         }
 
         lfr_filter_free(fp);
