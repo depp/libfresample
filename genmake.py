@@ -251,7 +251,8 @@ def run():
     p.defmakevar('CFLAGS', cflags)
     if platform.system() == 'Linux':
         p.defmakevar('PROJ_LDFLAGS', '-lm')
-    fl = '-Iinclude -Wall -Wextra'
+    fl = ('-Iinclude -Wall -Wextra -Wpointer-arith '
+          '-Wwrite-strings -Wmissing-prototypes -Wstrict-prototypes')
     if parsebool(args.get('WERROR', False)):
         fl += ' -Werror'
     p.defmakevar('PROJ_CFLAGS', fl)
