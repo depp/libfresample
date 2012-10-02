@@ -179,8 +179,8 @@ lfr_swap16(void *dest, const void *src, size_t count);
   Names for filter quality presets.
 */
 enum {
-    LFR_QUALITY_LOW = 0,
-    LFR_QUALITY_MEDIUM = 4,
+    LFR_QUALITY_LOW = 2,
+    LFR_QUALITY_MEDIUM = 5,
     LFR_QUALITY_HIGH = 8,
     LFR_QUALITY_ULTRA = 10
 };
