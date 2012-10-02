@@ -58,7 +58,7 @@ lfr_resample_s16func(int nchan, const struct lfr_filter *filter)
             return lfr_resample_s16n2s16_scalar;
 
         case LFR_FTYPE_F32:
-#if defined(LFR_CPU_X86) && 0
+#if defined(LFR_CPU_X86)
             if (f & LFR_CPUF_SSE2)
                 return lfr_resample_s16n2f32_sse2;
 #elif defined(LFR_CPU_PPC) && 0
