@@ -44,8 +44,8 @@ def test_sweep(depth, rate1, rate2):
         inpath, ['Makefile'],
         '$(SOX) -b %d -r %d -n $@ synth 8 sine 0+%d vol 0.999' %
         (depth, rate1, rate1//2))
-    for q in range(4):
-        outpath = 'out_%dk%d_%dk%dq' % \
+    for q in range(11):
+        outpath = 'out_%dk%d_%dk%02dq' % \
                   (rate1 // 1000, depth, rate2/1000, q)
         make.build(
             outpath + '.wav', [inpath, '$(FR)', 'Makefile'],

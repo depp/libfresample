@@ -74,7 +74,7 @@ lfr_filter_calculate_f32(float *data, int nsamp, int nfilt,
 {
     double x, x0, t, y, xscale, yscale;
     int i, j;
-    yscale = 32767.0 * 2.0 * cutoff / bessel_i0(beta);
+    yscale = 2.0 * cutoff / bessel_i0(beta);
     xscale = (8.0 * atan(1.0)) * cutoff;
     for (i = 0; i < nfilt; ++i) {
         x0 = (nsamp - 1) / 2 + offset * i;
