@@ -18,7 +18,7 @@ lfr_resample_s16n1f32_sse2(
     float accs, ff0f, ff1f, f;
     __m128i datilo, datihi, zv, acci0, acci1, accr;
     __m128 ff0v, ff1v, fir0, fir1, fir2, fir3, dat0, dat1;
-    __m128 acc, acc0, acc1, acc2;
+    __m128 acc, acc_a, acc_b, acc0, acc1, acc2;
     __m128i dsv, lcg_a, lcg_c;
     const __m128 *fd;
     lfr_fixed_t x;
@@ -59,7 +59,8 @@ lfr_resample_s16n1f32_sse2(
         ff0f = (float) ff0 * (32768.0f / (1 << INTERP_BITS));
         ff1f = (float) ff1 * (32768.0f / (1 << INTERP_BITS));
 
-        acc = _mm_set_ss(0.0f);
+        acc_a = _mm_set_ss(0.0f);
+        acc_b = _mm_set_ss(0.0f);
         /* off: offset in input corresponding to first sample in filter */
         off = (int) (x >> 32) - (flen >> 1);
         /* fidx0, fidx1: start, end indexes in FIR data */
@@ -74,7 +75,7 @@ lfr_resample_s16n1f32_sse2(
                     ((const float *) fd)[(fn+1) * (flen*8) + j] * ff1f;
                 accs += ((const short *) in)[j + off] * f;
             }
-            acc = _mm_set_ss(accs);
+            acc_a = _mm_set_ss(accs);
         } else {
             fidx0 = 0;
         }
@@ -87,7 +88,7 @@ lfr_resample_s16n1f32_sse2(
                     ((const float *) fd)[(fn+1) * (flen*8) + j] * ff1f;
                 accs += ((const short *) in)[j + off] * f;
             }
-            acc = _mm_add_ss(acc, _mm_set_ss(accs));
+            acc_b = _mm_set_ss(accs);
         } else {
             fidx1 = flen;
         }
@@ -109,10 +110,12 @@ lfr_resample_s16n1f32_sse2(
             fir1 = _mm_add_ps(_mm_mul_ps(fir1, ff0v), _mm_mul_ps(fir3, ff1v));
             dat0 = _mm_mul_ps(dat0, fir0);
             dat1 = _mm_mul_ps(dat1, fir1);
-            acc = _mm_add_ps(acc, _mm_add_ps(dat0, dat1));
+            acc_a = _mm_add_ps(acc_a, dat0);
+            acc_b = _mm_add_ps(acc_b, dat1);
         }
 
     accumulate:
+        acc = _mm_add_ps(acc_a, acc_b);
         switch (i & 7) {
         case 0: case 2: case 4: case 6:
             acc0 = acc;
