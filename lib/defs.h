@@ -96,7 +96,9 @@ lfr_rand_epu32(__m128i x, __m128i a, __m128i c)
 #endif
 
 #if defined(LFR_ALTIVEC)
+#if !defined(__APPLE_ALTIVEC__)
 #include <altivec.h>
+#endif
 
 /*
   Advance four linear congruential generators.  The four generators

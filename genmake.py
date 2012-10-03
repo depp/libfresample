@@ -25,6 +25,29 @@ def listsource(path):
             a.append(os.path.join(path, name))
     return a
 
+def get_special(name):
+    """Get the feature used by the given source file path.
+
+    Returns None if the source file path indicates no special
+    features.  For example, given "resample_sse2" this will return
+    "sse2".  This will only return features that actually exist, so
+    "resample_stereo" will return None, since "stereo" is not a
+    processor feature.
+
+    """
+    i = name.rfind('/')
+    if i >= 0:
+        name = name[i+1:]
+    i = name.find('.')
+    if i >= 0:
+        name = name[:i]
+    i = name.rfind('_')
+    if i >= 0:
+        special = name[i+1:]
+        if special in ALL_SPECIAL:
+            return special
+    return None
+
 VARSUBST = re.compile(r'@(\w+)@')
 
 class Builder(object):
@@ -43,6 +66,13 @@ class Builder(object):
             if self.base is not None:
                 return self.base[var]
             raise
+
+    def __contains__(self, var):
+        if var in self.vars:
+            return True
+        if self.base is not None:
+            return var in self.base
+        return False
 
     def defmakevar(self, var, val):
         if self.base is None:
@@ -64,23 +94,23 @@ class Builder(object):
         return VARSUBST.sub(repl, val)
 
     def compile(self, sources):
-        exclude = ALL_SPECIAL - set(SPECIAL.get(self.arch, set()))
-        def do_exclude(src):
-            for e in exclude:
-                if e in src:
-                    return True
-            return False
+        allowed_special = set(SPECIAL.get(self.arch, []))
         objs = []
         objdir = '@builddir@/obj'
         for src in sources:
-            if do_exclude(src):
-                continue
             dirpath, fname = os.path.split(src)
             base, ext = os.path.splitext(fname)
+            special = get_special(base)
+            if special and special not in allowed_special:
+                continue
             if ext == '.c':
                 objpath = os.path.join(objdir, base + '.o')
-                self.build(objpath, [src],
-                    '$(CC) $< -c -o $@ @cflags@')
+                cflags = '@cflags@'
+                if special:
+                    cflags = '$(%s_CFLAGS) %s' % (special.upper(), cflags)
+                self.build(
+                    objpath, [src],
+                    '$(CC) $< -c -o $@ ' + cflags)
             elif ext in ('.o', '.a'):
                 objpath = src
             else:
@@ -118,7 +148,8 @@ class RootBuilder(Builder):
         fp.write('all: %s\n' % ' '.join(sorted(self._defaults)))
         fp.write('.PHONY: %s\n' % ' '.join(sorted(self._phony)))
         fp.write('all_dirs := %s\n' % ' '.join(sorted(self._dirs)))
-        fp.write('missing_dirs := $(filter-out $(wildcard $(all_dirs)),$(all_dirs))\n')
+        fp.write('missing_dirs := $(filter-out $(wildcard '
+                 '$(all_dirs)),$(all_dirs))\n')
         fp.write('$(all_dirs):\n')
         fp.write('\tmkdir -p $@\n')
         fp.write(self._fp.getvalue())
@@ -157,11 +188,13 @@ class RootBuilder(Builder):
     def default_targets(self, targets):
         self._defaults.update([self.expand(target) for target in targets])
 
+SPECIAL_PPC = ['altivec']
+SPECIAL_X86 = 'mmx sse sse2 sse3 ssse3 sse41 sse42'.split()
 SPECIAL = {
-    'ppc': ['altivec'],
-    'ppc64': ['altivec'],
-    'i386': ['mmx', 'sse'],
-    'x86_64': ['mmx', 'sse']
+    'ppc': SPECIAL_PPC,
+    'ppc64': SPECIAL_PPC,
+    'i386': SPECIAL_X86,
+    'x86_64': SPECIAL_X86,
 }
 ALL_SPECIAL = set([y for x in SPECIAL.values() for y in x])
 
@@ -256,6 +289,11 @@ def run():
     if parsebool(args.get('WERROR', False)):
         fl += ' -Werror'
     p.defmakevar('PROJ_CFLAGS', fl)
+
+    # For GCC, -mpim-altivec compiles quickly but -maltivec
+    # takes forever to compile.
+    p.defmakevar('ALTIVEC_CFLAGS', '-mpim-altivec')
+
     if multiarch:
         a = MultiArchBuilder(p, archs)
     else:
