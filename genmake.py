@@ -293,6 +293,7 @@ def run():
     # For GCC, -mpim-altivec compiles quickly but -maltivec
     # takes forever to compile.
     p.defmakevar('ALTIVEC_CFLAGS', '-mpim-altivec')
+    p.defmakevar('SSE2_CFLAGS', '-msse2')
 
     if multiarch:
         a = MultiArchBuilder(p, archs)
