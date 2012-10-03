@@ -34,7 +34,7 @@ lfr_resample_s16func(int nchan, const struct lfr_filter *filter)
 #if defined(LFR_CPU_X86)
             if (f & LFR_CPUF_SSE2)
                 return lfr_resample_s16n1f32_sse2;
-#elif defined(LFR_CPU_PPC) && 0
+#elif defined(LFR_CPU_PPC)
             if (f & LFR_CPUF_ALTIVEC)
                 return lfr_resample_s16n1f32_altivec;
 #endif
