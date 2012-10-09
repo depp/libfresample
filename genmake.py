@@ -1,6 +1,9 @@
 #!/usr/bin/env python
-import os, re, sys, platform
-import cStringIO
+import os, re, sys, platform, subprocess
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from io import StringIO
 
 def fail(s):
     sys.stderr.write(s + '\n')
@@ -138,7 +141,7 @@ class Builder(object):
 class RootBuilder(Builder):
     def __init__(self):
         super(RootBuilder, self).__init__(None)
-        self._fp = cStringIO.StringIO()
+        self._fp = StringIO()
         self._dirs = set()
         self._phony = set(['all'])
         self._defaults = set()
@@ -263,13 +266,19 @@ def run():
     try:
         cflags = args['CFLAGS']
     except KeyError:
-        cflags = '-O2 -g' if release else '-O0 -g'
+        if release:
+            cflags = '-O2 -g'
+        else:
+            cflags = '-O0 -g'
     multiarch = platform.system() == 'Darwin'
     if multiarch:
         try:
             archs = args['ARCHS']
         except KeyError:
-            archs = 'i386 ppc x86_64 ppc64' if release else current_arch()
+            if release:
+                archs = 'i386 ppc x86_64 ppc64'
+            else:
+                archs = current_arch()
         if not archs:
             fail('no architectures specified\n')
         archs = archs.split()
