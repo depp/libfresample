@@ -78,7 +78,7 @@ lfr_resample_s16n1s16_altivec(
     vector unsigned int dsv;
     vector unsigned int lcg_a = { LCG_A4, LCG_A4, LCG_A4, LCG_A4 };
     vector unsigned int lcg_c = { LCG_C4, LCG_C4, LCG_C4, LCG_C4 };
-    int fn, ff0, ff1, off0, off, fidx0, fidx1;
+    int fn, ff0, ff1, off, fidx0, fidx1;
     int accs, i, f, t;
     unsigned ds;
 
@@ -98,7 +98,6 @@ lfr_resample_s16n1s16_altivec(
     firp = (const vector signed short *) filter->data;
     /* flen: Length of filter, measured in 128-bit words.  */
     flen = filter->nsamp >> 3;
-    off0 = filter->nsamp >> 1;
     /* log2nfilt: Base 2 logarithm of the number of filters.  */
     log2nfilt = filter->log2nfilt;
 
@@ -114,7 +113,7 @@ lfr_resample_s16n1s16_altivec(
     out1 = outlen + out0;
     outp = (vector signed short *) ((char *) out - out0 * 2);
 
-    x = *pos + ((lfr_fixed_t) in0 << 32);
+    x = *pos;
     ds = *dither;
     for (i = 0; i < (out0 & 7); ++i)
         ds = LCG_AI * ds + LCG_CI;
@@ -153,7 +152,7 @@ lfr_resample_s16n1s16_altivec(
 
         /* off: offset in input corresponding to first sample in
            filter */
-        off = (int) (x >> 32) - off0;
+        off = (int) (x >> 32);
 
         /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
            of whole FIR data we will use */
@@ -266,7 +265,7 @@ lfr_resample_s16n1s16_altivec(
     ds = un.w[0];
     for (i = 0; i < (out1 & 7); ++i)
         ds = LCG_A * ds + LCG_C;
-    *pos = x - ((lfr_fixed_t) in0 << 32);
+    *pos = x;
     *dither = ds;
 
     /* Store remaing bytes */

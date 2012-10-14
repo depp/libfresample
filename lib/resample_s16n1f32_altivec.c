@@ -39,7 +39,7 @@ lfr_resample_s16n1f32_altivec(
     fd = filter->data;
     flen = filter->nsamp >> 3;
     log2nfilt = filter->log2nfilt;
-    x = *pos - ((lfr_fixed_t) ((filter->nsamp - 1) >> 1) << 32);
+    x = *pos;
 
     ds = *dither;
     for (i = 0; i < 4; ++i) {
@@ -207,7 +207,7 @@ lfr_resample_s16n1f32_altivec(
     ds = u.w[0];
     for (i = 0; i < (outlen & 7); ++i)
         ds = LCG_A * ds + LCG_C;
-    *pos = x + ((lfr_fixed_t) ((filter->nsamp - 1) >> 1) << 32);
+    *pos = x;
     *dither = ds;
 
     acc = zv;
