@@ -201,7 +201,7 @@ flenv:
             fidx1 = flen;
         }
 
-        if (off & 7) {
+        if (((uintptr_t) in + off * 2) & 15) {
             load_perm = vec_lvsl(off * 2, (unsigned char *) 0);
             dat1 = vec_ld(fidx0 * 16 + off * 2, (short *) in);
             for (j = fidx0; j < fidx1; ++j) {
