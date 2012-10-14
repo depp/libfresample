@@ -72,15 +72,16 @@ test_sweep(16, 2, 96000, 48000)
 test_sweep(16, 2, 48000, 44100)
 make.phony('sweep', ['sweep-mono', 'sweep-stereo'])
 
-def test_correct(depth, rate1, rate2):
-    inpath = 'correct_%dk%d.wav' % (rate1 // 1000, depth)
-    make.build(
-        inpath, ['Makefile'],
-        '$(SOX) -b %d -r %d -n $@ synth 16 whitenoise' % (depth, rate1))
+def test_correct(depth, nchan, rate1, rate2):
+    name = 'correct_r%ds%dn%d' % (rate1 // 1000, depth, nchan)
+    inpath = name + '.wav'
+    cmd = '$(SOX) -b %d -r %d -n $@ synth 16 whitenoise' % (depth, rate1)
+    if nchan == 2:
+        cmd += ' whitenoise'
+    make.build(inpath, ['Makefile'], cmd)
     outputs = []
-    for q in range(11):
-        outpath = 'sweep_%dk%d_%dk%02dq' % \
-                  (rate1 // 1000, depth, rate2 // 1000, q)
+    for q in range(6): # q6 and higher is floating point
+        outpath = '%s_r%dq%02d' % (name, rate2 // 1000, q)
         out1 = outpath + '_1.wav'
         out2 = outpath + '_2.wav'
         make.build(
@@ -91,12 +92,14 @@ def test_correct(depth, rate1, rate2):
             '$(FR) -c all -q %d -r %d $< $@' % (q, rate2))
         outputs.append((out1, out2))
     make.build(
-        'test', [x for y in outputs for x in y],
+        name, [x for y in outputs for x in y],
         *(['cmp %s %s' % x for x in outputs] +
           ['@echo === OUTPUT MATCHES ===']))
+    make.phony('test', [name])
     make.add_default('test')
 
-test_correct(16, 48000, 44100)            
+test_correct(16, 1, 48000, 44100)            
+test_correct(16, 2, 48000, 44100)            
 
 make.write(
     'clean:',
