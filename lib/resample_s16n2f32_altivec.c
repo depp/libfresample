@@ -183,7 +183,7 @@ lfr_resample_s16n2f32_altivec(
                 vec_perm(acc0, acc, perm_hi64),
                 vec_perm(acc0, acc, perm_lo64));
 
-            shift = vec_splat_s32(1);
+            shift = vec_splat_u32(1);
             acc1 = vec_add(acc1, vec_ctf(vec_srl(dsv, shift), 31));
             acci0 = vec_cts(vec_floor(acc1), 0);
             dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
@@ -236,7 +236,7 @@ lfr_resample_s16n2f32_altivec(
                 vec_perm(acc0, acc, perm_hi64),
                 vec_perm(acc0, acc, perm_lo64));
 
-            shift = vec_splat_s32(1);
+            shift = vec_splat_u32(1);
             acc1 = vec_add(acc1, vec_ctf(vec_srl(dsv, shift), 31));
             acci0 = vec_cts(vec_floor(acc1), 0);
             dsv = lfr_vecrand(dsv, lcg_a, lcg_c);

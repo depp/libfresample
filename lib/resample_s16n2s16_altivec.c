@@ -96,6 +96,7 @@ lfr_resample_s16n2s16_altivec(
         unsigned short h[8];
         int w[4];
         vector signed int x;
+        vector unsigned int ux;
     } un;
 
     zero = vec_splat_s32(0);
@@ -131,7 +132,7 @@ lfr_resample_s16n2s16_altivec(
         un.w[i] = ds;
         ds = LCG_A * ds + LCG_C;
     }
-    dsv = un.x;
+    dsv = un.ux;
 
     un.w[2] = 0;
     un.w[3] = 0;
@@ -272,7 +273,7 @@ lfr_resample_s16n2s16_altivec(
         x += inv_ratio;
     }
 
-    un.x = dsv;
+    un.ux = dsv;
     ds = un.w[0];
     for (i = 0; i < (out1 & 7); ++i)
         ds = LCG_A * ds + LCG_C;
