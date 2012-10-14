@@ -6,101 +6,6 @@
 #include "resample.h"
 #include <stdint.h>
 
-#define UNALIGNED_LOAD 1
-
-#define LOOP_LOADFIR \
-    fir0 = firp[(fn+0)*flen + i];                   \
-    fir1 = firp[(fn+1)*flen + i];                   \
-                                                    \
-    fir0 = _mm_packs_epi32(                         \
-        _mm_srai_epi32(                             \
-            _mm_madd_epi16(                         \
-            _mm_unpacklo_epi16(fir0, fir1),         \
-            fir_interp),                            \
-            INTERP_BITS),                           \
-        _mm_srai_epi32(                             \
-            _mm_madd_epi16(                         \
-                _mm_unpackhi_epi16(fir0, fir1),     \
-                fir_interp),                        \
-            INTERP_BITS));                          \
-                                                    \
-    fir1 = _mm_unpackhi_epi16(fir0, fir0);          \
-    fir0 = _mm_unpacklo_epi16(fir0, fir0)
-
-#define LOOP_ACCUM \
-    acc = _mm_add_epi32(                            \
-        acc,                                        \
-        _mm_add_epi32(                              \
-            _mm_madd_epi16(                         \
-                _mm_unpacklo_epi16(dat0, dat1),     \
-                _mm_unpacklo_epi16(fir0, fir1)),    \
-            _mm_madd_epi16(                         \
-                _mm_unpackhi_epi16(dat0, dat1),     \
-                _mm_unpackhi_epi16(fir0, fir1))))
-
-
-#define LOOP_ALIGN0 \
-    for (i = fidx0; i < fidx1; ++i) {       \
-        dat0 = inp[(off >> 2) + i*2 + 0];   \
-        dat1 = inp[(off >> 2) + i*2 + 1];   \
-        LOOP_LOADFIR;                       \
-        LOOP_ACCUM;                         \
-    }
-
-#define LOOP_ALIGN(n) \
-    dat2 = inp[(off >> 2) + fidx0*2];           \
-    for (i = fidx0; i < fidx1; ++i) {           \
-        dat0 = dat2;                            \
-        dat1 = inp[(off >> 2) + i*2 + 1];       \
-        dat2 = inp[(off >> 2) + i*2 + 2];       \
-        dat0 = _mm_or_si128(                    \
-            _mm_srli_si128(dat0, (n)*2),        \
-            _mm_slli_si128(dat1, 16-(n)*2));    \
-        dat1 = _mm_or_si128(                    \
-            _mm_srli_si128(dat1, (n)*2),        \
-            _mm_slli_si128(dat2, 16-(n)*2));    \
-        LOOP_LOADFIR;                           \
-        LOOP_ACCUM;                             \
-    }
-
-#define LOOP_UNALIGNED \
-    for (i = fidx0; i < fidx1; ++i) {                   \
-        dat0 = _mm_loadu_si128(                         \
-            (const __m128i *)                           \
-            ((const short *) inp + off*2 + i*16));      \
-        dat1 = _mm_loadu_si128(                         \
-            (const __m128i *)                           \
-            ((const short *) inp + off*2 + i*16+8));    \
-        LOOP_LOADFIR;                                   \
-        LOOP_ACCUM;                                     \
-    }
-
-static __inline void
-lfr_storepartial0_epi16(__m128i x, int b, __m128i *dest)
-{
-    union {
-        unsigned short h[8];
-        __m128i x;
-    } u;
-    int i;
-    u.x = x;
-    for (i = (b & 7); i < 8; ++i)
-        ((short *) dest)[i] = u.h[i];
-}
-
-static __inline void
-lfr_storepartial1_epi16(__m128i x, int b, __m128i *dest)
-{
-    union {
-        unsigned short h[8];
-        __m128i x;
-    } u;
-    int i;
-    u.x = x;
-    for (i = 0; i < (b & 7); ++i)
-        ((short *) dest)[i] = u.h[i];
-}
-
 void
 lfr_resample_s16n2s16_sse2(
     lfr_fixed_t *pos, lfr_fixed_t inv_ratio, unsigned *dither,
@@ -115,9 +20,6 @@ lfr_resample_s16n2s16_sse2(
 
     __m128i acc, acc0, acc1, fir0, fir1, fir_interp, dat0, dat1;
     __m128i dsv, lcg_a, lcg_c;
-#if !UNALIGNED_LOAD
-    __m128i dat2;
-#endif
     int fn, ff0, ff1, off0, off, fidx0, fidx1;
     int accs0, accs1, i, f, t;
     unsigned ds;
@@ -221,16 +123,40 @@ lfr_resample_s16n2s16_sse2(
             fidx1 = flen;
         }
 
-#if UNALIGNED_LOAD
-        LOOP_UNALIGNED;
-#else
-        switch (off & 3) {
-        case 0: LOOP_ALIGN0; break;
-        case 1: LOOP_ALIGN(2); break;
-        case 2: LOOP_ALIGN(4); break;
-        case 3: LOOP_ALIGN(6); break;
+        for (i = fidx0; i < fidx1; ++i) {
+            dat0 = _mm_loadu_si128(
+                (const __m128i *)
+                ((const short *) inp + off*2 + i*16));
+            dat1 = _mm_loadu_si128(
+                (const __m128i *)
+                ((const short *) inp + off*2 + i*16+8));
+            fir0 = firp[(fn+0)*flen + i];
+            fir1 = firp[(fn+1)*flen + i];
+
+            fir0 = _mm_packs_epi32(
+                _mm_srai_epi32(
+                    _mm_madd_epi16(
+                        _mm_unpacklo_epi16(fir0, fir1),
+                        fir_interp),
+                    INTERP_BITS),
+                _mm_srai_epi32(
+                    _mm_madd_epi16(
+                        _mm_unpackhi_epi16(fir0, fir1),
+                        fir_interp),
+                    INTERP_BITS));
+
+            fir1 = _mm_unpackhi_epi16(fir0, fir0);
+            fir0 = _mm_unpacklo_epi16(fir0, fir0);
+            acc = _mm_add_epi32(
+                acc,
+                _mm_add_epi32(
+                    _mm_madd_epi16(
+                        _mm_unpacklo_epi16(dat0, dat1),
+                        _mm_unpacklo_epi16(fir0, fir1)),
+                    _mm_madd_epi16(
+                        _mm_unpackhi_epi16(dat0, dat1),
+                        _mm_unpackhi_epi16(fir0, fir1))));
         }
-#endif
 
     accumulate:
         switch (outidx & 3) {
