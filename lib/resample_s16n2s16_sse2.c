@@ -20,7 +20,7 @@ lfr_resample_s16n2s16_sse2(
 
     __m128i acc, acc0, acc1, fir0, fir1, fir_interp, dat0, dat1;
     __m128i dsv, lcg_a, lcg_c;
-    int fn, ff0, ff1, off0, off, fidx0, fidx1;
+    int fn, ff0, ff1, off, fidx0, fidx1;
     int accs0, accs1, i, f, t;
     unsigned ds;
 
@@ -33,7 +33,6 @@ lfr_resample_s16n2s16_sse2(
     firp = (const __m128i *) filter->data;
     /* flen: Length of filter, measured in 128-bit words.  */
     flen = filter->nsamp >> 3;
-    off0 = (filter->nsamp >> 1);
     /* log2nfilt: Base 2 logarithm of the number of filters.  */
     log2nfilt = filter->log2nfilt;
 
@@ -82,7 +81,7 @@ lfr_resample_s16n2s16_sse2(
 
         /* off: offset in input corresponding to first sample in
            filter */
-        off = (int) (x >> 32) - off0;
+        off = (int) (x >> 32);
 
         /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
            of whole FIR data we will use */
