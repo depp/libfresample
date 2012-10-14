@@ -30,7 +30,7 @@ lfr_resample_s16n1s16_scalar(
         ff0 = (1u << INTERP_BITS) - ff1;
 
         /* off: offset in input corresponding to first sample in filter */
-        off = (int) (x >> 32) - (flen >> 1);
+        off = (int) (x >> 32);
         /* fidx0, fidx1: start, end indexes in FIR data */
         fidx0 = -off;
         if (fidx0 < 0)

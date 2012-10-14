@@ -111,7 +111,7 @@ main(int argc, char *argv[])
     struct lfr_param *param;
     FILE *file;
     clock_t t0, t1;
-    lfr_fixed_t pos, inv_ratio;
+    lfr_fixed_t pos, pos0, inv_ratio;
     unsigned dither;
     double time, speed;
 
@@ -229,7 +229,9 @@ main(int argc, char *argv[])
         if (!fp)
             error("could not create filter");
 
-        pos = 0;
+        pos0 = -lfr_filter_delay(fp);
+
+        pos = pos0;
         dither = DITHER_SEED;
         lfr_resample(
             &pos, inv_ratio, &dither, ain.nchan,
@@ -240,7 +242,7 @@ main(int argc, char *argv[])
         if (benchmark > 0) {
             t0 = clock();
             for (bi = 0; bi < benchmark; ++bi) {
-                pos = 0;
+                pos = pos0;
                 dither = DITHER_SEED;
                 lfr_resample(
                     &pos, inv_ratio, &dither, ain.nchan,

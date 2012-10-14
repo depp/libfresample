@@ -134,6 +134,7 @@ lfr_filter_new_window(
          ~((uintptr_t) align - 1));
     fp->nsamp = nsamp;
     fp->log2nfilt = log2nfilt;
+    fp->delay = (lfr_fixed_t) ((nsamp - 1) / 2) << 32;
 
     *fpp = fp;
 

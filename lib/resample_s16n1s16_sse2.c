@@ -33,7 +33,7 @@ lfr_resample_s16n1s16_sse2(
     flen = filter->nsamp >> 3;
     /* log2nfilt: Base 2 logarithm of the number of filters.  */
     log2nfilt = filter->log2nfilt;
-    x = *pos - ((lfr_fixed_t) (filter->nsamp >> 1) << 32);
+    x = *pos;
 
     ds = *dither;
     for (i = 0; i < 4; ++i) {
@@ -164,7 +164,7 @@ lfr_resample_s16n1s16_sse2(
     ds = _mm_cvtsi128_si32(dsv);
     for (i = 0; i < (outlen & 7); ++i)
         ds = LCG_A * ds + LCG_C;
-    *pos = x + ((lfr_fixed_t) (filter->nsamp >> 1) << 32);
+    *pos = x;
     *dither = ds;
 
     /* Store remaing bytes */

@@ -60,6 +60,12 @@ struct lfr_filter {
       filter shifted right by one sample.
     */
     int log2nfilt;
+
+    /*
+      Filter delay.  Filters are causal, so this should be
+      non-negative.
+    */
+    lfr_fixed_t delay;
 };
 
 /*

@@ -389,6 +389,24 @@ LFR_PUBLIC void
 lfr_filter_free(struct lfr_filter *fp);
 
 /*
+  Get the size of a filter.  This is the (not oversampled) FIR filter
+  order, and the resampler will read this many samples beyond a given
+  position to compute the resampled value.  In other words, this is
+  the number of samples of overlap needed when resampling consecutive
+  buffers.
+*/
+LFR_PUBLIC int
+lfr_filter_size(const struct lfr_filter *fp);
+
+/*
+  Get the delay of a filter, in fixed point.  Filters are causal, so
+  you can subtract the filter delay from the position to create a
+  non-causal filter with zero delay.
+*/
+LFR_PUBLIC lfr_fixed_t
+lfr_filter_delay(const struct lfr_filter *fp);
+
+/*
   Resample an audio buffer.  Note that this function may need to
   create intermediate buffers if there is no function which can
   directly operate on the input and output formats.  No intermediate
