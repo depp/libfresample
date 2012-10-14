@@ -5,12 +5,11 @@
 #if defined(LFR_CPU_PPC)
 #include "resample.h"
 #include <stdint.h>
-
-#define UNALIGNED_LOAD 1
+#include <string.h>
 
 #define LOOP_LOADFIR \
-    fir0 = firp[(fn+0)*flen + i];       \
-    fir1 = firp[(fn+1)*flen + i];       \
+    fir0 = fd[(fn+0)*flen + j];         \
+    fir1 = fd[(fn+1)*flen + j];         \
                                         \
     fir0 = vec_pack(                    \
         vec_sra(                        \
@@ -29,114 +28,66 @@
 #define LOOP_ACCUM \
     acc = vec_msum(dat0, fir0, acc)
 
-static __inline void
-lfr_storepartial0_vec16(vector signed short x, int b,
-                        vector signed short *dest)
-{
-    union {
-        unsigned short h[8];
-        vector signed short x;
-    } u;
-    int i;
-    u.x = x;
-    for (i = (b & 7); i < 8; ++i)
-        ((unsigned short *) dest)[i] = u.h[i];
-}
-
-static __inline void
-lfr_storepartial1_vec16(vector signed short x, int b,
-                        vector signed short *dest)
-{
-    union {
-        unsigned short h[8];
-        vector signed short x;
-    } u;
-    int i;
-    u.x = x;
-    for (i = 0; i < (b & 7); ++i)
-        ((unsigned short *) dest)[i] = u.h[i];
-}
-
 void
 lfr_resample_s16n1s16_altivec(
     lfr_fixed_t *pos, lfr_fixed_t inv_ratio, unsigned *dither,
     void *out, int outlen, const void *in, int inlen,
     const struct lfr_filter *filter)
 {
-    const vector signed short *firp, *inp;
-    vector signed short *outp;
-    int in0, in1, out0, out1, outidx;
+    const vector signed short *fd;
     int flen, log2nfilt;
     lfr_fixed_t x;
 
     vector unsigned char perm_hi64 =
         { 0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23 };
-    vector unsigned char perm_lo64, load_perm;
-    vector signed short fir0, fir1, fir_interp, dat0, dat1, acc_r;
+    vector unsigned char perm_lo64, load_perm, store_perm;
+    vector signed short fir0, fir1, fir_interp, dat0, dat1;
+    vector signed short out0, out1;
     vector unsigned int acc_shift, fir_shift;
     vector signed int acc, acc0, acc1, acc2, zero;
-    vector unsigned int dsv;
-    vector unsigned int lcg_a = { LCG_A4, LCG_A4, LCG_A4, LCG_A4 };
-    vector unsigned int lcg_c = { LCG_C4, LCG_C4, LCG_C4, LCG_C4 };
+    vector unsigned int dsv, lcg_a, lcg_c;;
     int fn, ff0, ff1, off, fidx0, fidx1;
-    int accs, i, f, t;
+    int accs, i, j, f, a0, a1;
     unsigned ds;
 
     union {
-        unsigned short h[8];
-        int w[4];
-        vector signed int x;
-        vector unsigned int ux;
-    } un;
+        unsigned short h[16];
+        int w[8];
+        vector signed short vh[2];
+        vector signed int vs[2];
+        vector unsigned int vw[2];
+    } u;
 
     zero = vec_splat_s32(0);
     perm_lo64 = vec_add(perm_hi64, vec_splat_u8(8));
     acc_shift = vec_splat_u32(15);
     fir_shift = vec_splat_u32(INTERP_BITS);
 
-    /* firp: Pointer to beginning of filter coefficients, aligned.  */
-    firp = (const vector signed short *) filter->data;
-    /* flen: Length of filter, measured in 128-bit words.  */
+    fd = (const vector signed short *) filter->data;
     flen = filter->nsamp >> 3;
-    /* log2nfilt: Base 2 logarithm of the number of filters.  */
     log2nfilt = filter->log2nfilt;
-
-    /* in0, in1: Frame index of input start and end, measured from
-       aligned input pointer.  inp: aligned input pointer.  */
-    in0 = ((uintptr_t) in >> 1) & 7;
-    in1 = inlen + in0;
-    inp = (const vector signed short *) ((char *) in - in0 * 2);
-
-    /* out0, out1: Frame index of output start and end, measured from
-       aligned output pointer.  outp: aligned output pointer.  */
-    out0 = ((uintptr_t) out >> 1) & 7;
-    out1 = outlen + out0;
-    outp = (vector signed short *) ((char *) out - out0 * 2);
 
     x = *pos;
     ds = *dither;
-    for (i = 0; i < (out0 & 7); ++i)
-        ds = LCG_AI * ds + LCG_CI;
     for (i = 0; i < 4; ++i) {
-        un.w[i] = ds;
+        u.w[i] = ds;
         ds = ds * LCG_A + LCG_C;
     }
-    dsv = un.ux;
+    dsv = u.vw[0];
+    u.w[0] = LCG_A4;
+    u.w[1] = LCG_C4;
+    lcg_a = u.vw[0];
+    lcg_c = vec_splat(lcg_a, 1);
+    lcg_a = vec_splat(lcg_a, 0);
 
-    un.w[1] = 0;
-    un.w[2] = 0;
-    un.w[3] = 0;
+    u.w[1] = 0;
+    u.w[2] = 0;
+    u.w[3] = 0;
 
-    acc0 = vec_splat_s32(0);
-    acc1 = vec_splat_s32(0);
-    acc2 = vec_splat_s32(0);
-    for (outidx = out0; outidx < out1; ++outidx) {
-        /* acc: FIR accumulator, used for accumulating 32-bit values
-           in the format L R L R.  This corresponds to one frame of
-           output, so the pair of values for left and the pair for
-           right have to be summed later.  */
-        acc = vec_splat_s32(0);
-
+    acc0 = acc1 = acc2 = vec_splat_s32(0);
+    out0 = out1 = vec_splat_s16(0);
+    store_perm = vec_lvsr(0, (short *) out);
+    for (i = 0; i < outlen; ++i) {
         /* fn: filter number
            ff0: filter factor for filter fn
            ff1: filter factor for filter fn+1 */
@@ -145,32 +96,35 @@ lfr_resample_s16n1s16_altivec(
         ff1 = ((unsigned) x >> (32 - log2nfilt - INTERP_BITS)) &
             ((1u << INTERP_BITS) - 1);
         ff0 = (1u << INTERP_BITS) - ff1;
-        un.h[0] = ff0;
-        un.h[1] = ff1;
+        u.h[0] = ff0;
+        u.h[1] = ff1;
         fir_interp = (vector signed short)
-            vec_splat((vector signed int) un.x, 0);
+            vec_splat((vector signed int) u.vs[0], 0);
 
+        /* acc: FIR accumulator, used for accumulating 32-bit values
+           in the format L R L R.  This corresponds to one frame of
+           output, so the pair of values for left and the pair for
+           right have to be summed later.  */
+        acc = vec_splat_s32(0);
         /* off: offset in input corresponding to first sample in
            filter */
         off = (int) (x >> 32);
-
         /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
            of whole FIR data we will use */
-        fidx0 = (in0 - off + 7) >> 3;
-        fidx1 = (in1 - off) >> 3;
+        fidx0 = (-off + 7) >> 3;
+        fidx1 = (inlen - off) >> 3;
         if (fidx0 > 0) {
             if (fidx0 > flen)
                 goto accumulate;
             accs = 0;
-            t = (off > in0) ? off : in0;
-            for (i = t; i < fidx0 * 8 + off; ++i) {
-                f = (((const short *) firp)[(fn+0)*flen*8 + i - off] * ff0 +
-                     ((const short *) firp)[(fn+1)*flen*8 + i - off] * ff1)
+            for (j = -off; j < fidx0 * 8; ++j) {
+                f = (((const short *) fd)[(fn+0) * (flen*8) + j] * ff0 +
+                     ((const short *) fd)[(fn+1) * (flen*8) + j] * ff1)
                     >> INTERP_BITS;
-                accs += ((const short *) inp)[i] * f;
+                accs += ((const short *) in)[j + off] * f;
             }
-            un.w[0] = accs;
-            acc = un.x;
+            u.w[0] = accs;
+            acc = u.vs[0];
         } else {
             fidx0 = 0;
         }
@@ -178,39 +132,38 @@ lfr_resample_s16n1s16_altivec(
             if (fidx1 < 0)
                 goto accumulate;
             accs = 0;
-            t = (off + flen*8 < in1) ? (off + flen*8) : in1;
-            for (i = fidx1 * 8 + off; i < t; ++i) {
-                f = (((const short *) firp)[(fn+0)*flen*8 + i - off] * ff0 +
-                     ((const short *) firp)[(fn+1)*flen*8 + i - off] * ff1)
+            for (j = fidx1 * 8; j < inlen - off; ++j) {
+                f = (((const short *) fd)[(fn+0) * (flen*8) + j] * ff0 +
+                     ((const short *) fd)[(fn+1) * (flen*8) + j] * ff1)
                     >> INTERP_BITS;
-                accs += ((const short *) inp)[i] * f;
+                accs += ((const short *) in)[j + off] * f;
             }
-            un.w[0] = accs;
-            acc = vec_add(acc, un.x);
+            u.w[0] = accs;
+            acc = vec_add(acc, u.vs[0]);
         } else {
             fidx1 = flen;
         }
 
         if (off & 7) {
             load_perm = vec_lvsl(off * 2, (unsigned char *) 0);
-            dat1 = inp[(off >> 3) + fidx0];
-            for (i = fidx0; i < fidx1; ++i) {
+            dat1 = vec_ld(fidx0 * 16 + off * 2, (short *) in);
+            for (j = fidx0; j < fidx1; ++j) {
                 dat0 = dat1;
-                dat1 = inp[(off >> 3) + i + 1];
+                dat1 = vec_ld((j + 1) * 16 + off * 2, (short *) in);
                 dat0 = vec_perm(dat0, dat1, load_perm);
                 LOOP_LOADFIR;
                 LOOP_ACCUM;
             }
         } else {
-            for (i = fidx0; i < fidx1; ++i) {
-                dat0 = inp[(off >> 3) + i];
+            for (j = fidx0; j < fidx1; ++j) {
+                dat0 = vec_ld(j * 16 + off * 2, (short *) in);
                 LOOP_LOADFIR;
                 LOOP_ACCUM;
             }
         }
 
     accumulate:
-        switch (outidx & 7) {
+        switch (i & 7) {
         case 0: case 2: case 4: case 6:
             acc0 = acc;
             break;
@@ -247,33 +200,39 @@ lfr_resample_s16n1s16_altivec(
                 (vector signed int) vec_sr(dsv, vec_splat_u32(17-32)));
             dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
 
-            acc_r = vec_packs(
+            out1 = vec_packs(
                 vec_sra(acc2, acc_shift),
                 vec_sra(acc1, acc_shift));
-            if (outidx - out0 >= 7)
-                *outp = acc_r;
-            else
-                lfr_storepartial0_vec16(acc_r, out0 * 2, outp);
-            outp += 1;
+            out0 = vec_perm(out0, out1, store_perm);
+            if (i >= 8) {
+                vec_st(out0, i * 2, (short *) out);
+            } else {
+                a0 = (int) ((uintptr_t) out & 15);
+                memcpy(out, (unsigned char *) &out0 + a0, 16 - a0);
+            }
+            out0 = out1;
             break;
         }
 
         x += inv_ratio;
     }
 
-    un.ux = dsv;
-    ds = un.w[0];
-    for (i = 0; i < (out1 & 7); ++i)
+    u.vw[0] = dsv;
+    ds = u.w[0];
+    for (i = 0; i < (outlen & 7); ++i)
         ds = LCG_A * ds + LCG_C;
     *pos = x;
     *dither = ds;
 
     /* Store remaing bytes */
-    if ((outidx & 7) == 0)
-        return;
+    if ((outlen & 7) == 0) {
+        out0 = vec_perm(out0, out0, store_perm);
+        i = outlen + 8;
+        goto final;
+    }
     acc = vec_splat_s32(0);
-    for (; ; ++outidx) {
-        switch (outidx & 7) {
+    for (i = outlen; ; ++i) {
+        switch (i & 7) {
         case 0: case 2: case 4: case 6:
             acc0 = acc;
             break;
@@ -309,13 +268,30 @@ lfr_resample_s16n1s16_altivec(
                 acc1,
                 (vector signed int) vec_sr(dsv, vec_splat_u32(17-32)));
 
-            acc_r = vec_packs(
+            out1 = vec_packs(
                 vec_sra(acc2, acc_shift),
                 vec_sra(acc1, acc_shift));
-            lfr_storepartial1_vec16(acc_r, out1, outp);
-            return;
+            out0 = vec_perm(out0, out1, store_perm);
+            out1 = vec_perm(out1, out1, store_perm);
+            goto final;
         }
     }
+
+final:
+    /* byte offset of data point i in (out0, out1) */
+    off = (int) ((uintptr_t) out & 15) + 16;
+    if (off > 2*i)
+        a0 = off - 2*i;
+    else
+        a0 = 0;
+    if (off + 2*(outlen - i) > 32)
+        a1 = 32;
+    else
+        a1 = off + 2*(outlen - i);
+
+    u.vh[0] = out0;
+    u.vh[1] = out1;
+    memcpy((char *) out + 2*i - off + a0, (char *) &u + a0, a1 - a0);
 }
 
 #endif
