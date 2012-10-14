@@ -48,46 +48,39 @@
         vec_mergel(fir0, fir1),         \
         acc_b)
 
+#define LOOP_COMBINE \
+    perm_lo64 = vec_add(perm_hi64, vec_splat_u8(8));            \
+                                                                \
+    y1 = vec_add(                                               \
+        vec_perm(a[0], a[1], perm_hi64),                        \
+        vec_perm(a[0], a[1], perm_lo64));                       \
+    y2 = vec_add(                                               \
+        vec_perm(a[2], a[3], perm_hi64),                        \
+        vec_perm(a[2], a[3], perm_lo64));                       \
+                                                                \
+    shift = vec_splat_u32(17 - 32);                             \
+    y1 = vec_add(y1, (vector signed int) vec_sr(dsv, shift));   \
+    dsv = lfr_vecrand(dsv, lcg_a, lcg_c);                       \
+    y2 = vec_add(y2, (vector signed int) vec_sr(dsv, shift));   \
+    dsv = lfr_vecrand(dsv, lcg_a, lcg_c);                       \
+                                                                \
+    shift = vec_splat_u32(15);                                  \
+    out1 = vec_packs(vec_sra(y1, shift), vec_sra(y2, shift))
+
 #define LOOP_STORE \
-    switch (i & 3) {                                    \
-    case 0: case 2:                                     \
-        acc0 = acc;                                     \
-        break;                                          \
-                                                        \
-    case 1:                                             \
-        acc1 = vec_add(                                 \
-            vec_perm(acc0, acc, perm_hi64),             \
-            vec_perm(acc0, acc, perm_lo64));            \
-        break;                                          \
-                                                        \
-    case 3:                                             \
-        acc0 = vec_add(                                 \
-            vec_perm(acc0, acc, perm_hi64),             \
-            vec_perm(acc0, acc, perm_lo64));            \
-                                                        \
-        acc1 = vec_add(                                 \
-            acc1,                                       \
-            (vector signed int)                         \
-            vec_sr(dsv, vec_splat_u32(17-32)));         \
-        dsv = lfr_vecrand(dsv, lcg_a, lcg_c);           \
-        acc0 = vec_add(                                 \
-            acc0,                                       \
-            (vector signed int)                         \
-            vec_sr(dsv, vec_splat_u32(17-32)));         \
-        dsv = lfr_vecrand(dsv, lcg_a, lcg_c);           \
-                                                        \
-        out1 = vec_packs(                               \
-            vec_sra(acc1, acc_shift),                   \
-            vec_sra(acc0, acc_shift));                  \
+    a[i & 3] = acc;                                     \
+    if ((i & 3) == 3) {                                 \
+        LOOP_COMBINE;                                   \
         out0 = vec_perm(out0, out1, store_perm);        \
-        if (i >= 4) {                                   \
+        if (i > 3) {                                    \
             vec_st(out0, (i - 3) * 4, (short *) out);   \
         } else {                                        \
             a0 = (int) ((uintptr_t) out & 15);          \
-            memcpy(out, (char *) &out0 + a0, 16 - a0);  \
+            u.vh[0] = out0;                             \
+            memcpy(out, (char *) &u + a0, 16 - a0);     \
+            u.vh[0] = vec_splat_s16(0);                 \
         }                                               \
         out0 = out1;                                    \
-        break;                                          \
     }
 
 void
@@ -107,8 +100,9 @@ lfr_resample_s16n2s16_altivec(
     vector signed short dat0, dat1, dat2, dat3, dat4, dat5, dat6;
     vector signed short out0, out1;
     vector unsigned int acc_shift, fir_shift;
-    vector signed int acc_a, acc_b, acc, acc0, acc1, zero;
-    vector unsigned int dsv, lcg_a, lcg_c;
+    vector signed int acc_a, acc_b, acc, a[4], zero;
+    vector signed int y1, y2;
+    vector unsigned int dsv, lcg_a, lcg_c, shift;
     int fn, ff0, ff1, off, fidx0, fidx1;
     int accs0, accs1, i, j, f, a0, a1;
     unsigned ds;
@@ -146,7 +140,6 @@ lfr_resample_s16n2s16_altivec(
     u.w[2] = 0;
     u.w[3] = 0;
 
-    acc0 = acc1 = vec_splat_s32(0);
     out0 = out1 = vec_splat_s16(0);
     store_perm = vec_lvsr(0, (short *) out);
 
@@ -376,61 +369,25 @@ done:
 
     /* Store remaing bytes */
     if ((outlen & 3) == 0) {
-        out0 = vec_perm(out0, out0, store_perm);
-        i = outlen + 4;
-        goto final;
+        out1 = vec_splat_s16(0);
+        out0 = vec_perm(out0, out1, store_perm);
+    } else {
+        LOOP_COMBINE;
+        out0 = vec_perm(out0, out1, store_perm);
+        out1 = vec_perm(out1, out1, store_perm);
     }
-    acc = vec_splat_s32(0);
-    for (i = outlen; ; ++i) {
-        switch (i & 3) {
-        case 0: case 2:
-            acc0 = acc;
-            break;
-
-        case 1:
-            acc1 = vec_add(
-                vec_perm(acc0, acc, perm_hi64),
-                vec_perm(acc0, acc, perm_lo64));
-            break;
-
-        case 3:
-            acc0 = vec_add(
-                vec_perm(acc0, acc, perm_hi64),
-                vec_perm(acc0, acc, perm_lo64));
-
-            acc1 = vec_add(
-                acc1,
-                (vector signed int) vec_sr(dsv, vec_splat_u32(17-32)));
-            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
-            acc0 = vec_add(
-                acc0,
-                (vector signed int) vec_sr(dsv, vec_splat_u32(17-32)));
-            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
-
-            out1 = vec_packs(
-                vec_sra(acc1, acc_shift),
-                vec_sra(acc0, acc_shift));
-            out0 = vec_perm(out0, out1, store_perm);
-            out1 = vec_perm(out1, out1, store_perm);
-            goto final;
-       }
-    }
-
-final:
-    /* byte offset of data point i in (out0, out1) */
-    off = (int) ((uintptr_t) out & 15) + 16;
-    if (off > 4*i)
-        a0 = off - 4*i;
-    else
-        a0 = 0;
-    if (off + 4*(outlen - i) > 32)
-        a1 = 32;
-    else
-        a1 = off + 4*(outlen - i);
 
     u.vh[0] = out0;
     u.vh[1] = out1;
-    memcpy((char *) out + 4*i - off + a0, (char *) &u + a0, a1 - a0);
+    i = outlen & ~3;
+    /* byte offset of data point i in (out0, out1) */
+    off = 4*i - (((int) (uintptr_t) out + 2*i) & 15);
+    a0 = off < 0 ? -off : 0;
+    a1 = outlen * 4 - off;
+    if (a1 > 32)
+        a1 = 32;
+    if (a1 > a0)
+        memcpy((char *) out + off + a0, (char *) &u + a0, a1 - a0);
 }
 
 #endif
