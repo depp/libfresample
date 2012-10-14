@@ -434,6 +434,29 @@ lfr_resample(
     const void *in, lfr_fmt_t infmt, int inlen,
     const struct lfr_filter *filter);
 
+/*
+  Specialized resampling function, designed to work with a specific
+  sample format and filter type.  Do not attempt to reuse a function
+  for a different filter.
+
+  Note that lengths are still measured in frames, but since the
+  function is specialized for a given format and number of channels,
+  there is no need to specify the format or number of channels.
+*/
+typedef void
+(*lfr_resample_func_t)(
+    lfr_fixed_t *pos, lfr_fixed_t inv_ratio, unsigned *dither,
+    void *out, int outlen, const void *in, int inlen,
+    const struct lfr_filter *filter);
+
+/*
+  Get a function for resampling native 16-bit data with the given
+  number of channels.  Returns NULL if no such function is available.
+  This will always return non-NULL for mono and stereo data.
+*/
+LFR_PUBLIC lfr_resample_func_t
+lfr_resample_s16func(int nchan, const struct lfr_filter *filter);
+
 #ifdef __cplusplus
 }
 #endif
