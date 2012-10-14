@@ -44,8 +44,7 @@ lfr_resample_s16n1s16_sse2(
     lcg_a = _mm_set1_epi32(LCG_A4);
     lcg_c = _mm_set1_epi32(LCG_C4);
 
-    acc0 = _mm_set1_epi32(0);
-    acc1 = _mm_set1_epi32(0);
+    acc0 = acc1 = acc2 = _mm_set1_epi32(0);
     switch (flen) {
     case 2: goto flen2;
     case 3: goto flen3;
