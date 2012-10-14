@@ -46,6 +46,13 @@ lfr_resample_s16n1s16_sse2(
 
     acc0 = _mm_set1_epi32(0);
     acc1 = _mm_set1_epi32(0);
+    switch (flen) {
+    case 2: goto flen2;
+    case 3: goto flen3;
+    default: goto flenv;
+    }
+
+flenv:
     for (i = 0; i < outlen; ++i) {
         /* fn: filter number
            ff0: filter factor for filter fn
@@ -70,7 +77,7 @@ lfr_resample_s16n1s16_sse2(
         fidx1 = (inlen - off) >> 3;
         if (fidx0 > 0) {
             if (fidx0 > flen)
-                goto accumulate;
+                goto flenv_accumulate;
             accs = 0;
             for (j = -off; j < fidx0 * 8; ++j) {
                 f = (((const short *) fd)[(fn+0) * (flen*8) + j] * ff0 +
@@ -84,7 +91,7 @@ lfr_resample_s16n1s16_sse2(
         }
         if (fidx1 < flen) {
             if (fidx1 < 0)
-                goto accumulate;
+                goto flenv_accumulate;
             accs = 0;
             for (j = fidx1 * 8; j < inlen - off; ++j) {
                 f = (((const short *) fd)[(fn+0) * (flen*8) + j] * ff0 +
@@ -117,7 +124,7 @@ lfr_resample_s16n1s16_sse2(
             acc = _mm_add_epi32(acc, _mm_madd_epi16(dat0, fir0));
         }
 
-    accumulate:
+    flenv_accumulate:
         switch (i & 7) {
         case 0: case 2: case 4: case 6:
             acc0 = acc;
@@ -160,7 +167,273 @@ lfr_resample_s16n1s16_sse2(
 
         x += inv_ratio;
     }
+    goto final;
 
+flen2:
+    for (i = 0; i < outlen; ++i) {
+        fn = (((unsigned) x >> 1) >> (31 - log2nfilt)) &
+            ((1u << log2nfilt) - 1);
+        ff1 = ((unsigned) x >> (32 - log2nfilt - INTERP_BITS)) &
+            ((1u << INTERP_BITS) - 1);
+        ff0 = (1u << INTERP_BITS) - ff1;
+        fir_interp = _mm_set1_epi32(ff0 | (ff1 << 16));
+
+        /* off: offset in input corresponding to first sample in
+           filter */
+        off = (int) (x >> 32);
+        /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
+           of whole FIR data we will use */
+        fidx0 = (-off + 7) >> 3;
+        fidx1 = (inlen - off) >> 3;
+        if (fidx0 > 0)
+            goto flen2_slow;
+        if (fidx1 < 2)
+            goto flen2_slow;
+
+        dat0 = _mm_loadu_si128(
+            (const __m128i *)
+            ((const short *) in + off + 0));
+        fir0 = fd[(fn+0)*2 + 0];
+        fir1 = fd[(fn+1)*2 + 0];
+        fir0 = _mm_packs_epi32(
+            _mm_srai_epi32(
+                _mm_madd_epi16(
+                    _mm_unpacklo_epi16(fir0, fir1),
+                    fir_interp),
+                INTERP_BITS),
+            _mm_srai_epi32(
+                _mm_madd_epi16(
+                    _mm_unpackhi_epi16(fir0, fir1),
+                    fir_interp),
+                INTERP_BITS));
+
+        acc = _mm_madd_epi16(dat0, fir0);
+
+        dat0 = _mm_loadu_si128(
+            (const __m128i *)
+            ((const short *) in + off + 8));
+        fir0 = fd[(fn+0)*2 + 1];
+        fir1 = fd[(fn+1)*2 + 1];
+        fir0 = _mm_packs_epi32(
+            _mm_srai_epi32(
+                _mm_madd_epi16(
+                    _mm_unpacklo_epi16(fir0, fir1),
+                    fir_interp),
+                INTERP_BITS),
+            _mm_srai_epi32(
+                _mm_madd_epi16(
+                    _mm_unpackhi_epi16(fir0, fir1),
+                    fir_interp),
+                INTERP_BITS));
+        acc = _mm_add_epi32(acc, _mm_madd_epi16(dat0, fir0));
+
+        goto flen2_accumulate;
+
+    flen2_slow:
+        fidx0 = -off;
+        if (fidx0 < 0)
+            fidx0 = 0;
+        fidx1 = inlen - off;
+        if (fidx1 > 16)
+            fidx1 = 16;
+
+        accs = 0;
+        for (j = fidx0; j < fidx1; ++j) {
+            f = (((const short *) fd)[(fn+0) * 16 + j] * ff0 +
+                 ((const short *) fd)[(fn+1) * 16 + j] * ff1)
+                >> INTERP_BITS;
+            accs += ((const short *) in)[j + off] * f;
+        }
+        acc = _mm_cvtsi32_si128(accs);
+        goto flen2_accumulate;
+
+    flen2_accumulate:
+        switch (i & 7) {
+        case 0: case 2: case 4: case 6:
+            acc0 = acc;
+            break;
+
+        case 1: case 5:
+            acc1 = _mm_add_epi32(
+                _mm_unpacklo_epi32(acc0, acc),
+                _mm_unpackhi_epi32(acc0, acc));
+            break;
+
+        case 3:
+            acc0 = _mm_add_epi32(
+                _mm_unpacklo_epi32(acc0, acc),
+                _mm_unpackhi_epi32(acc0, acc));
+            acc2 = _mm_add_epi32(
+                _mm_unpacklo_epi64(acc1, acc0),
+                _mm_unpackhi_epi64(acc1, acc0));
+            break;
+
+        case 7:
+            acc0 = _mm_add_epi32(
+                _mm_unpacklo_epi32(acc0, acc),
+                _mm_unpackhi_epi32(acc0, acc));
+            acc1 = _mm_add_epi32(
+                _mm_unpacklo_epi64(acc1, acc0),
+                _mm_unpackhi_epi64(acc1, acc0));
+
+            acc2 = _mm_add_epi32(acc2, _mm_srli_epi32(dsv, 17));
+            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
+            acc1 = _mm_add_epi32(acc1, _mm_srli_epi32(dsv, 17));
+            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
+
+            acc = _mm_packs_epi32(
+                _mm_srai_epi32(acc2, 15),
+                _mm_srai_epi32(acc1, 15));
+            _mm_storeu_si128((__m128i *) ((short *) out + i - 7), acc);
+            break;
+        }
+
+        x += inv_ratio;
+    }
+    goto final;
+
+flen3:
+    for (i = 0; i < outlen; ++i) {
+        fn = (((unsigned) x >> 1) >> (31 - log2nfilt)) &
+            ((1u << log2nfilt) - 1);
+        ff1 = ((unsigned) x >> (32 - log2nfilt - INTERP_BITS)) &
+            ((1u << INTERP_BITS) - 1);
+        ff0 = (1u << INTERP_BITS) - ff1;
+        fir_interp = _mm_set1_epi32(ff0 | (ff1 << 16));
+
+        /* off: offset in input corresponding to first sample in
+           filter */
+        off = (int) (x >> 32);
+        /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
+           of whole FIR data we will use */
+        fidx0 = (-off + 7) >> 3;
+        fidx1 = (inlen - off) >> 3;
+        if (fidx0 > 0)
+            goto flen3_slow;
+        if (fidx1 < 3)
+            goto flen3_slow;
+
+        dat0 = _mm_loadu_si128(
+            (const __m128i *)
+            ((const short *) in + off + 0));
+        fir0 = fd[(fn+0)*3 + 0];
+        fir1 = fd[(fn+1)*3 + 0];
+        fir0 = _mm_packs_epi32(
+            _mm_srai_epi32(
+                _mm_madd_epi16(
+                    _mm_unpacklo_epi16(fir0, fir1),
+                    fir_interp),
+                INTERP_BITS),
+            _mm_srai_epi32(
+                _mm_madd_epi16(
+                    _mm_unpackhi_epi16(fir0, fir1),
+                    fir_interp),
+                INTERP_BITS));
+
+        acc = _mm_madd_epi16(dat0, fir0);
+
+        dat0 = _mm_loadu_si128(
+            (const __m128i *)
+            ((const short *) in + off + 8));
+        fir0 = fd[(fn+0)*3 + 1];
+        fir1 = fd[(fn+1)*3 + 1];
+        fir0 = _mm_packs_epi32(
+            _mm_srai_epi32(
+                _mm_madd_epi16(
+                    _mm_unpacklo_epi16(fir0, fir1),
+                    fir_interp),
+                INTERP_BITS),
+            _mm_srai_epi32(
+                _mm_madd_epi16(
+                    _mm_unpackhi_epi16(fir0, fir1),
+                    fir_interp),
+                INTERP_BITS));
+        acc = _mm_add_epi32(acc, _mm_madd_epi16(dat0, fir0));
+
+        dat0 = _mm_loadu_si128(
+            (const __m128i *)
+            ((const short *) in + off + 16));
+        fir0 = fd[(fn+0)*3 + 2];
+        fir1 = fd[(fn+1)*3 + 2];
+        fir0 = _mm_packs_epi32(
+            _mm_srai_epi32(
+                _mm_madd_epi16(
+                    _mm_unpacklo_epi16(fir0, fir1),
+                    fir_interp),
+                INTERP_BITS),
+            _mm_srai_epi32(
+                _mm_madd_epi16(
+                    _mm_unpackhi_epi16(fir0, fir1),
+                    fir_interp),
+                INTERP_BITS));
+        acc = _mm_add_epi32(acc, _mm_madd_epi16(dat0, fir0));
+
+        goto flen3_accumulate;
+
+    flen3_slow:
+        fidx0 = -off;
+        if (fidx0 < 0)
+            fidx0 = 0;
+        fidx1 = inlen - off;
+        if (fidx1 > 24)
+            fidx1 = 24;
+
+        accs = 0;
+        for (j = fidx0; j < fidx1; ++j) {
+            f = (((const short *) fd)[(fn+0) * 24 + j] * ff0 +
+                 ((const short *) fd)[(fn+1) * 24 + j] * ff1)
+                >> INTERP_BITS;
+            accs += ((const short *) in)[j + off] * f;
+        }
+        acc = _mm_cvtsi32_si128(accs);
+        goto flen3_accumulate;
+
+    flen3_accumulate:
+        switch (i & 7) {
+        case 0: case 2: case 4: case 6:
+            acc0 = acc;
+            break;
+
+        case 1: case 5:
+            acc1 = _mm_add_epi32(
+                _mm_unpacklo_epi32(acc0, acc),
+                _mm_unpackhi_epi32(acc0, acc));
+            break;
+
+        case 3:
+            acc0 = _mm_add_epi32(
+                _mm_unpacklo_epi32(acc0, acc),
+                _mm_unpackhi_epi32(acc0, acc));
+            acc2 = _mm_add_epi32(
+                _mm_unpacklo_epi64(acc1, acc0),
+                _mm_unpackhi_epi64(acc1, acc0));
+            break;
+
+        case 7:
+            acc0 = _mm_add_epi32(
+                _mm_unpacklo_epi32(acc0, acc),
+                _mm_unpackhi_epi32(acc0, acc));
+            acc1 = _mm_add_epi32(
+                _mm_unpacklo_epi64(acc1, acc0),
+                _mm_unpackhi_epi64(acc1, acc0));
+
+            acc2 = _mm_add_epi32(acc2, _mm_srli_epi32(dsv, 17));
+            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
+            acc1 = _mm_add_epi32(acc1, _mm_srli_epi32(dsv, 17));
+            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
+
+            acc = _mm_packs_epi32(
+                _mm_srai_epi32(acc2, 15),
+                _mm_srai_epi32(acc1, 15));
+            _mm_storeu_si128((__m128i *) ((short *) out + i - 7), acc);
+            break;
+        }
+
+        x += inv_ratio;
+    }
+    goto final;
+
+final:
     ds = _mm_cvtsi128_si32(dsv);
     for (i = 0; i < (outlen & 7); ++i)
         ds = LCG_A * ds + LCG_C;
