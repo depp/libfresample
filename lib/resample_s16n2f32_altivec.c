@@ -7,6 +7,41 @@
 #include <stdint.h>
 #include <string.h>
 
+#define LOOP_COMBINE \
+    perm_lo64 = vec_add(perm_hi64, vec_splat_u8(8));    \
+                                                        \
+    x1 = vec_add(                                       \
+        vec_perm(a[0], a[1], perm_hi64),                \
+        vec_perm(a[0], a[1], perm_lo64));               \
+    x2 = vec_add(                                       \
+        vec_perm(a[2], a[3], perm_hi64),                \
+        vec_perm(a[2], a[3], perm_lo64));               \
+                                                        \
+    shift = vec_splat_u32(1);                           \
+    x1 = vec_add(x1, vec_ctf(vec_srl(dsv, shift), 31)); \
+    z1 = vec_cts(vec_floor(x1), 0);                     \
+    dsv = lfr_vecrand(dsv, lcg_a, lcg_c);               \
+    x2 = vec_add(x2, vec_ctf(vec_srl(dsv, shift), 31)); \
+    z2 = vec_cts(vec_floor(x2), 0);                     \
+    dsv = lfr_vecrand(dsv, lcg_a, lcg_c);               \
+    out1 = vec_packs(z1, z2)
+
+#define LOOP_STORE \
+    a[i & 3] = acc;                                     \
+    if ((i & 3) == 3) {                                 \
+        LOOP_COMBINE;                                   \
+        out0 = vec_perm(out0, out1, store_perm);        \
+        if (i > 3) {                                    \
+            vec_st(out0, (i - 3) * 4, (short *) out);   \
+        } else {                                        \
+            a0 = (int) ((uintptr_t) out & 15);          \
+            u.vh[0] = out0;                             \
+            memcpy(out, (char *) &u + a0, 16 - a0);     \
+            u.vh[0] = vec_splat_s16(0);                 \
+        }                                               \
+        out0 = out1;                                    \
+    }
+
 void
 lfr_resample_s16n2f32_altivec(
     lfr_fixed_t *pos, lfr_fixed_t inv_ratio, unsigned *dither,
@@ -18,12 +53,12 @@ lfr_resample_s16n2f32_altivec(
     vector unsigned char load_perm, store_perm;
     vector unsigned char perm_hi64 =
         { 0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23 };
-    vector unsigned char perm_lo64 = vec_add(perm_hi64, vec_splat_u8(8));
+    vector unsigned char perm_lo64;
     vector signed short dati0, dati1, dati2, out0, out1;
     vector float ff0v, ff1v, fir0, fir1, fir2, fir3;
     vector float dat0, dat1, dat2, dat3;
-    vector float acc, acc_a, acc_b, acc0, acc1, zv;
-    vector signed int acci0, acci1;
+    vector float acc, acc_a, acc_b, zv, a[4], x1, x2;
+    vector signed int z1, z2;
     vector unsigned int dsv, lcg_a, lcg_c, shift;
     const vector float *fd;
     lfr_fixed_t x;
@@ -57,8 +92,6 @@ lfr_resample_s16n2f32_altivec(
     u.f[2] = 0.0f;
     u.f[3] = 0.0f;
     zv = (vector float) vec_splat_s32(0);
-    acc0 = zv;
-    acc1 = zv;
     out0 = out1 = vec_splat_s16(0);
     store_perm = vec_lvsr(0, (short *) out);
     for (i = 0; i < outlen; ++i) {
@@ -167,41 +200,7 @@ lfr_resample_s16n2f32_altivec(
 
     accumulate:
         acc = vec_add(acc_a, acc_b);
-        switch (i & 3) {
-        case 0: case 2:
-            acc0 = acc;
-            break;
-
-        case 1:
-            acc1 = vec_add(
-                vec_perm(acc0, acc, perm_hi64),
-                vec_perm(acc0, acc, perm_lo64));
-            break;
-
-        case 3:
-            acc0 = vec_add(
-                vec_perm(acc0, acc, perm_hi64),
-                vec_perm(acc0, acc, perm_lo64));
-
-            shift = vec_splat_u32(1);
-            acc1 = vec_add(acc1, vec_ctf(vec_srl(dsv, shift), 31));
-            acci0 = vec_cts(vec_floor(acc1), 0);
-            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
-            acc0 = vec_add(acc0, vec_ctf(vec_srl(dsv, shift), 31));
-            acci1 = vec_cts(vec_floor(acc0), 0);
-            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
-
-            out1 = vec_packs(acci0, acci1);
-            out0 = vec_perm(out0, out1, store_perm);
-            if (i >= 4) {
-                vec_st(out0, (i - 3) * 4, (short *) out);
-            } else {
-                a0 = (int) ((uintptr_t) out & 15);
-                memcpy(out, (unsigned char *) &out0 + a0, 16 - a0);
-            }
-            out0 = out1;
-            break;
-        }
+        LOOP_STORE;
 
         x += inv_ratio;
     }
@@ -216,42 +215,12 @@ lfr_resample_s16n2f32_altivec(
     acc = zv;
     if ((outlen & 3) == 0) {
         out0 = vec_perm(out0, out0, store_perm);
-        i = outlen + 4;
-        goto final;
-    }
-    for (i = outlen; ; ++i) {
-        switch (i & 3) {
-        case 0: case 2:
-            acc0 = acc;
-            break;
-
-        case 1:
-            acc1 = vec_add(
-                vec_perm(acc0, acc, perm_hi64),
-                vec_perm(acc0, acc, perm_lo64));
-            break;
-
-        case 3:
-            acc0 = vec_add(
-                vec_perm(acc0, acc, perm_hi64),
-                vec_perm(acc0, acc, perm_lo64));
-
-            shift = vec_splat_u32(1);
-            acc1 = vec_add(acc1, vec_ctf(vec_srl(dsv, shift), 31));
-            acci0 = vec_cts(vec_floor(acc1), 0);
-            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
-            acc0 = vec_add(acc0, vec_ctf(vec_srl(dsv, shift), 31));
-            acci1 = vec_cts(vec_floor(acc0), 0);
-            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
-
-            out1 = vec_packs(acci0, acci1);
-            out0 = vec_perm(out0, out1, store_perm);
-            out1 = vec_perm(out1, out1, store_perm);
-            goto final;
-        }
+    } else {
+        LOOP_COMBINE;
+        out0 = vec_perm(out0, out1, store_perm);
+        out1 = vec_perm(out1, out1, store_perm);
     }
 
-final:
     u.vh[0] = out0;
     u.vh[1] = out1;
     i = outlen & ~3;

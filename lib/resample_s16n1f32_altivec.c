@@ -7,6 +7,46 @@
 #include <stdint.h>
 #include <string.h>
 
+#define LOOP_COMBINE \
+    perm_lo64 = vec_add(perm_hi64, vec_splat_u8(8));                \
+                                                                    \
+    x1 = vec_add(vec_mergeh(a[0], a[1]), vec_mergel(a[0], a[1]));   \
+    x2 = vec_add(vec_mergeh(a[2], a[3]), vec_mergel(a[2], a[3]));   \
+    x3 = vec_add(vec_mergeh(a[4], a[5]), vec_mergel(a[4], a[5]));   \
+    x4 = vec_add(vec_mergeh(a[6], a[7]), vec_mergel(a[6], a[7]));   \
+                                                                    \
+    x1 = vec_add(                                                   \
+        vec_perm(x1, x2, perm_hi64),                                \
+        vec_perm(x1, x2, perm_lo64));                               \
+    x2 = vec_add(                                                   \
+        vec_perm(x3, x4, perm_hi64),                                \
+        vec_perm(x3, x4, perm_lo64));                               \
+                                                                    \
+    shift = vec_splat_u32(1);                                       \
+    x1 = vec_add(x1, vec_ctf(vec_srl(dsv, shift), 31));             \
+    z1 = vec_cts(vec_floor(x1), 0);                                 \
+    dsv = lfr_vecrand(dsv, lcg_a, lcg_c);                           \
+    x2 = vec_add(x2, vec_ctf(vec_srl(dsv, shift), 31));             \
+    z2 = vec_cts(vec_floor(x2), 0);                                 \
+    dsv = lfr_vecrand(dsv, lcg_a, lcg_c);                           \
+    out1 = vec_packs(z1, z2)
+
+#define LOOP_STORE \
+    a[i & 7] = acc;                                     \
+    if ((i & 7) == 7) {                                 \
+        LOOP_COMBINE;                                   \
+        out0 = vec_perm(out0, out1, store_perm);        \
+        if (i > 7) {                                    \
+            vec_st(out0, (i - 7) * 2, (short *) out);   \
+        } else {                                        \
+            a0 = (int) ((uintptr_t) out & 15);          \
+            u.vh[0] = out0;                             \
+            memcpy(out, (char *) &u + a0, 16 - a0);     \
+            u.vh[0] = vec_splat_s16(0);                 \
+        }                                               \
+        out0 = out1;                                    \
+    }
+
 void
 lfr_resample_s16n1f32_altivec(
     lfr_fixed_t *pos, lfr_fixed_t inv_ratio, unsigned *dither,
@@ -21,8 +61,9 @@ lfr_resample_s16n1f32_altivec(
     vector unsigned char perm_lo64 = vec_add(perm_hi64, vec_splat_u8(8));
     vector signed short dati0, dati1, out0, out1;
     vector float ff0v, ff1v, fir0, fir1, fir2, fir3, dat0, dat1;
-    vector float acc, acc_a, acc_b, acc0, acc1, acc2, zv;
-    vector signed int acci0, acci1;
+    vector float acc, acc_a, acc_b, a[8], zv;
+    vector float x1, x2, x3, x4;
+    vector signed int z1, z2;
     vector unsigned int dsv, lcg_a, lcg_c, shift;
     const vector float *fd;
     lfr_fixed_t x;
@@ -56,9 +97,6 @@ lfr_resample_s16n1f32_altivec(
     u.f[2] = 0.0f;
     u.f[3] = 0.0f;
     zv = (vector float) vec_splat_s32(0);
-    acc0 = zv;
-    acc1 = zv;
-    acc2 = zv;
     out0 = out1 = vec_splat_s16(0);
     store_perm = vec_lvsr(0, (short *) out);
     for (i = 0; i < outlen; ++i) {
@@ -152,53 +190,7 @@ lfr_resample_s16n1f32_altivec(
 
     accumulate:
         acc = vec_add(acc_a, acc_b);
-        switch (i & 7) {
-        case 0: case 2: case 4: case 6:
-            acc0 = acc;
-            break;
-
-        case 1: case 5:
-            acc1 = vec_add(
-                vec_mergeh(acc0, acc),
-                vec_mergel(acc0, acc));
-            break;
-
-        case 3:
-            acc0 = vec_add(
-                vec_mergeh(acc0, acc),
-                vec_mergel(acc0, acc));
-            acc2 = vec_add(
-                vec_perm(acc1, acc0, perm_hi64),
-                vec_perm(acc1, acc0, perm_lo64));
-            break;
-
-        case 7:
-            acc0 = vec_add(
-                vec_mergeh(acc0, acc),
-                vec_mergel(acc0, acc));
-            acc1 = vec_add(
-                vec_perm(acc1, acc0, perm_hi64),
-                vec_perm(acc1, acc0, perm_lo64));
-
-            shift = vec_splat_u32(1);
-            acc2 = vec_add(acc2, vec_ctf(vec_srl(dsv, shift), 31));
-            acci0 = vec_cts(vec_floor(acc2), 0);
-            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
-            acc1 = vec_add(acc1, vec_ctf(vec_srl(dsv, shift), 31));
-            acci1 = vec_cts(vec_floor(acc1), 0);
-            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
-
-            out1 = vec_packs(acci0, acci1);
-            out0 = vec_perm(out0, out1, store_perm);
-            if (i >= 8) {
-                vec_st(out0, (i - 7) * 2, (short *) out);
-            } else {
-                a0 = (int) ((uintptr_t) out & 15);
-                memcpy(out, (unsigned char *) &out0 + a0, 16 - a0);
-            }
-            out0 = out1;
-            break;
-        }
+        LOOP_STORE;
 
         x += inv_ratio;
     }
@@ -210,56 +202,14 @@ lfr_resample_s16n1f32_altivec(
     *pos = x;
     *dither = ds;
 
-    acc = zv;
     if ((outlen & 7) == 0) {
         out0 = vec_perm(out0, out0, store_perm);
-        goto final;
-    }
-    for (i = outlen; ; ++i) {
-        switch (i & 7) {
-        case 0: case 2: case 4: case 6:
-            acc0 = acc;
-            break;
-
-        case 1: case 5:
-            acc1 = vec_add(
-                vec_mergeh(acc0, acc),
-                vec_mergel(acc0, acc));
-            break;
-
-        case 3:
-            acc0 = vec_add(
-                vec_mergeh(acc0, acc),
-                vec_mergel(acc0, acc));
-            acc2 = vec_add(
-                vec_perm(acc1, acc0, perm_hi64),
-                vec_perm(acc1, acc0, perm_lo64));
-            break;
-
-        case 7:
-            acc0 = vec_add(
-                vec_mergeh(acc0, acc),
-                vec_mergel(acc0, acc));
-            acc1 = vec_add(
-                vec_perm(acc1, acc0, perm_hi64),
-                vec_perm(acc1, acc0, perm_lo64));
-
-            shift = vec_splat_u32(1);
-            acc2 = vec_add(acc2, vec_ctf(vec_srl(dsv, shift), 31));
-            acci0 = vec_cts(vec_floor(acc2), 0);
-            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
-            acc1 = vec_add(acc1, vec_ctf(vec_srl(dsv, shift), 31));
-            acci1 = vec_cts(vec_floor(acc1), 0);
-            dsv = lfr_vecrand(dsv, lcg_a, lcg_c);
-
-            out1 = vec_packs(acci0, acci1);
-            out0 = vec_perm(out0, out1, store_perm);
-            out1 = vec_perm(out1, out1, store_perm);
-            goto final;
-        }
+    } else {
+        LOOP_COMBINE;
+        out0 = vec_perm(out0, out1, store_perm);
+        out1 = vec_perm(out1, out1, store_perm);
     }
 
-final:
     u.vh[0] = out0;
     u.vh[1] = out1;
     i = outlen & ~7;
