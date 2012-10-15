@@ -6,6 +6,52 @@
 #include "resample.h"
 #include <string.h>
 
+#define LOOP_FIRCOEFF \
+    fn = (((unsigned) x >> 1) >> (31 - log2nfilt)) &            \
+        ((1u << log2nfilt) - 1);                                \
+    ff1 = ((unsigned) x >> (32 - log2nfilt - INTERP_BITS)) &    \
+        ((1u << INTERP_BITS) - 1);                              \
+    ff0 = (1u << INTERP_BITS) - ff1;                            \
+    fir_interp = _mm_set1_epi32(ff0 | (ff1 << 16));
+
+
+#define LOOP_COMBINE \
+    x1 = _mm_add_epi32(                                 \
+        _mm_unpacklo_epi32(a[0], a[1]),                 \
+        _mm_unpackhi_epi32(a[0], a[1]));                \
+    x2 = _mm_add_epi32(                                 \
+        _mm_unpacklo_epi32(a[2], a[3]),                 \
+        _mm_unpackhi_epi32(a[2], a[3]));                \
+    x3 = _mm_add_epi32(                                 \
+        _mm_unpacklo_epi32(a[4], a[5]),                 \
+        _mm_unpackhi_epi32(a[4], a[5]));                \
+    x4 = _mm_add_epi32(                                 \
+        _mm_unpacklo_epi32(a[6], a[7]),                 \
+        _mm_unpackhi_epi32(a[6], a[7]));                \
+                                                        \
+    x1 = _mm_add_epi32(                                 \
+        _mm_unpacklo_epi64(x1, x2),                     \
+        _mm_unpackhi_epi64(x1, x2));                    \
+    x2 = _mm_add_epi32(                                 \
+        _mm_unpacklo_epi64(x3, x4),                     \
+        _mm_unpackhi_epi64(x3, x4));                    \
+                                                        \
+    x1 = _mm_add_epi32(x1, _mm_srli_epi32(dsv, 17));    \
+    dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);            \
+    x2 = _mm_add_epi32(x2, _mm_srli_epi32(dsv, 17));    \
+    dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);            \
+                                                        \
+    acc = _mm_packs_epi32(                              \
+        _mm_srai_epi32(x1, 15),                         \
+        _mm_srai_epi32(x2, 15))
+
+#define LOOP_STORE \
+    a[i & 7] = acc;                                                 \
+    if ((i & 7) == 7) {                                             \
+        LOOP_COMBINE;                                               \
+        _mm_storeu_si128((__m128i *) ((short *) out + i - 7), acc); \
+    }
+
 void
 lfr_resample_s16n1s16_sse2(
     lfr_fixed_t *pos, lfr_fixed_t inv_ratio, unsigned *dither,
@@ -16,7 +62,8 @@ lfr_resample_s16n1s16_sse2(
     int flen, log2nfilt;
     lfr_fixed_t x;
 
-    __m128i acc, acc0, acc1, acc2, fir0, fir1, fir_interp, dat0;
+    __m128i acc, fir0, fir1, fir_interp, dat0;
+    __m128i a[8], x1, x2, x3, x4;
     __m128i dsv, lcg_a, lcg_c;
     int fn, ff0, ff1, off, fidx0, fidx1;
     int accs, i, j, f;
@@ -44,7 +91,6 @@ lfr_resample_s16n1s16_sse2(
     lcg_a = _mm_set1_epi32(LCG_A4);
     lcg_c = _mm_set1_epi32(LCG_C4);
 
-    acc0 = acc1 = acc2 = _mm_set1_epi32(0);
     switch (flen) {
     case 2: goto flen2;
     case 3: goto flen3;
@@ -53,15 +99,7 @@ lfr_resample_s16n1s16_sse2(
 
 flenv:
     for (i = 0; i < outlen; ++i) {
-        /* fn: filter number
-           ff0: filter factor for filter fn
-           ff1: filter factor for filter fn+1 */
-        fn = (((unsigned) x >> 1) >> (31 - log2nfilt)) &
-            ((1u << log2nfilt) - 1);
-        ff1 = ((unsigned) x >> (32 - log2nfilt - INTERP_BITS)) &
-            ((1u << INTERP_BITS) - 1);
-        ff0 = (1u << INTERP_BITS) - ff1;
-        fir_interp = _mm_set1_epi32(ff0 | (ff1 << 16));
+        LOOP_FIRCOEFF;
 
         /* acc: FIR accumulator, as four 32-bit words.  The four words
            must be added, shifted, and packed before they can be
@@ -124,45 +162,7 @@ flenv:
         }
 
     flenv_accumulate:
-        switch (i & 7) {
-        case 0: case 2: case 4: case 6:
-            acc0 = acc;
-            break;
-
-        case 1: case 5:
-            acc1 = _mm_add_epi32(
-                _mm_unpacklo_epi32(acc0, acc),
-                _mm_unpackhi_epi32(acc0, acc));
-            break;
-
-        case 3:
-            acc0 = _mm_add_epi32(
-                _mm_unpacklo_epi32(acc0, acc),
-                _mm_unpackhi_epi32(acc0, acc));
-            acc2 = _mm_add_epi32(
-                _mm_unpacklo_epi64(acc1, acc0),
-                _mm_unpackhi_epi64(acc1, acc0));
-            break;
-
-        case 7:
-            acc0 = _mm_add_epi32(
-                _mm_unpacklo_epi32(acc0, acc),
-                _mm_unpackhi_epi32(acc0, acc));
-            acc1 = _mm_add_epi32(
-                _mm_unpacklo_epi64(acc1, acc0),
-                _mm_unpackhi_epi64(acc1, acc0));
-
-            acc2 = _mm_add_epi32(acc2, _mm_srli_epi32(dsv, 17));
-            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
-            acc1 = _mm_add_epi32(acc1, _mm_srli_epi32(dsv, 17));
-            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
-
-            acc = _mm_packs_epi32(
-                _mm_srai_epi32(acc2, 15),
-                _mm_srai_epi32(acc1, 15));
-            _mm_storeu_si128((__m128i *) ((short *) out + i - 7), acc);
-            break;
-        }
+        LOOP_STORE;
 
         x += inv_ratio;
     }
@@ -170,12 +170,7 @@ flenv:
 
 flen2:
     for (i = 0; i < outlen; ++i) {
-        fn = (((unsigned) x >> 1) >> (31 - log2nfilt)) &
-            ((1u << log2nfilt) - 1);
-        ff1 = ((unsigned) x >> (32 - log2nfilt - INTERP_BITS)) &
-            ((1u << INTERP_BITS) - 1);
-        ff0 = (1u << INTERP_BITS) - ff1;
-        fir_interp = _mm_set1_epi32(ff0 | (ff1 << 16));
+        LOOP_FIRCOEFF;
 
         /* off: offset in input corresponding to first sample in
            filter */
@@ -247,45 +242,7 @@ flen2:
         goto flen2_accumulate;
 
     flen2_accumulate:
-        switch (i & 7) {
-        case 0: case 2: case 4: case 6:
-            acc0 = acc;
-            break;
-
-        case 1: case 5:
-            acc1 = _mm_add_epi32(
-                _mm_unpacklo_epi32(acc0, acc),
-                _mm_unpackhi_epi32(acc0, acc));
-            break;
-
-        case 3:
-            acc0 = _mm_add_epi32(
-                _mm_unpacklo_epi32(acc0, acc),
-                _mm_unpackhi_epi32(acc0, acc));
-            acc2 = _mm_add_epi32(
-                _mm_unpacklo_epi64(acc1, acc0),
-                _mm_unpackhi_epi64(acc1, acc0));
-            break;
-
-        case 7:
-            acc0 = _mm_add_epi32(
-                _mm_unpacklo_epi32(acc0, acc),
-                _mm_unpackhi_epi32(acc0, acc));
-            acc1 = _mm_add_epi32(
-                _mm_unpacklo_epi64(acc1, acc0),
-                _mm_unpackhi_epi64(acc1, acc0));
-
-            acc2 = _mm_add_epi32(acc2, _mm_srli_epi32(dsv, 17));
-            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
-            acc1 = _mm_add_epi32(acc1, _mm_srli_epi32(dsv, 17));
-            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
-
-            acc = _mm_packs_epi32(
-                _mm_srai_epi32(acc2, 15),
-                _mm_srai_epi32(acc1, 15));
-            _mm_storeu_si128((__m128i *) ((short *) out + i - 7), acc);
-            break;
-        }
+        LOOP_STORE;
 
         x += inv_ratio;
     }
@@ -293,12 +250,7 @@ flen2:
 
 flen3:
     for (i = 0; i < outlen; ++i) {
-        fn = (((unsigned) x >> 1) >> (31 - log2nfilt)) &
-            ((1u << log2nfilt) - 1);
-        ff1 = ((unsigned) x >> (32 - log2nfilt - INTERP_BITS)) &
-            ((1u << INTERP_BITS) - 1);
-        ff0 = (1u << INTERP_BITS) - ff1;
-        fir_interp = _mm_set1_epi32(ff0 | (ff1 << 16));
+        LOOP_FIRCOEFF;
 
         /* off: offset in input corresponding to first sample in
            filter */
@@ -388,45 +340,7 @@ flen3:
         goto flen3_accumulate;
 
     flen3_accumulate:
-        switch (i & 7) {
-        case 0: case 2: case 4: case 6:
-            acc0 = acc;
-            break;
-
-        case 1: case 5:
-            acc1 = _mm_add_epi32(
-                _mm_unpacklo_epi32(acc0, acc),
-                _mm_unpackhi_epi32(acc0, acc));
-            break;
-
-        case 3:
-            acc0 = _mm_add_epi32(
-                _mm_unpacklo_epi32(acc0, acc),
-                _mm_unpackhi_epi32(acc0, acc));
-            acc2 = _mm_add_epi32(
-                _mm_unpacklo_epi64(acc1, acc0),
-                _mm_unpackhi_epi64(acc1, acc0));
-            break;
-
-        case 7:
-            acc0 = _mm_add_epi32(
-                _mm_unpacklo_epi32(acc0, acc),
-                _mm_unpackhi_epi32(acc0, acc));
-            acc1 = _mm_add_epi32(
-                _mm_unpacklo_epi64(acc1, acc0),
-                _mm_unpackhi_epi64(acc1, acc0));
-
-            acc2 = _mm_add_epi32(acc2, _mm_srli_epi32(dsv, 17));
-            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
-            acc1 = _mm_add_epi32(acc1, _mm_srli_epi32(dsv, 17));
-            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
-
-            acc = _mm_packs_epi32(
-                _mm_srai_epi32(acc2, 15),
-                _mm_srai_epi32(acc1, 15));
-            _mm_storeu_si128((__m128i *) ((short *) out + i - 7), acc);
-            break;
-        }
+        LOOP_STORE;
 
         x += inv_ratio;
     }
@@ -441,52 +355,10 @@ final:
 
     /* Store remaing bytes */
     acc = _mm_set1_epi32(0);
-    if ((outlen & 7) == 0)
-        return;
-    for (i = outlen; ; ++i) {
-        switch (i & 7) {
-        case 0: case 2: case 4: case 6:
-            acc0 = acc;
-            break;
-
-        case 1: case 5:
-            acc1 = _mm_add_epi32(
-                _mm_unpacklo_epi32(acc0, acc),
-                _mm_unpackhi_epi32(acc0, acc));
-            break;
-
-        case 3:
-            acc0 = _mm_add_epi32(
-                _mm_unpacklo_epi32(acc0, acc),
-                _mm_unpackhi_epi32(acc0, acc));
-            acc2 = _mm_add_epi32(
-                _mm_unpacklo_epi64(acc1, acc0),
-                _mm_unpackhi_epi64(acc1, acc0));
-            break;
-
-        case 7:
-            acc0 = _mm_add_epi32(
-                _mm_unpacklo_epi32(acc0, acc),
-                _mm_unpackhi_epi32(acc0, acc));
-            acc1 = _mm_add_epi32(
-                _mm_unpacklo_epi64(acc1, acc0),
-                _mm_unpackhi_epi64(acc1, acc0));
-
-            /* Apply dither */
-            acc2 = _mm_add_epi32(acc2, _mm_srli_epi32(dsv, 17));
-            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
-            acc1 = _mm_add_epi32(acc1, _mm_srli_epi32(dsv, 17));
-
-            acc = _mm_packs_epi32(
-                _mm_srai_epi32(acc2, 15),
-                _mm_srai_epi32(acc1, 15));
-            /* We move acc before we call memcpy... because it seems
-               otherwise, we break some of GCC's escape analysis, and
-               get a 13-15% slowdown!  */
-            u.x = acc;
-            memcpy((short *) out + i - 7, &u, 2 * (outlen & 7));
-            return;
-        }
+    if ((outlen & 7) != 0) {
+        LOOP_COMBINE;
+        u.x = acc;
+        memcpy((short *) out + (outlen & ~7), &u, 2 * (outlen & 7));
     }
 }
 

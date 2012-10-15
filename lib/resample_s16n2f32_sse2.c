@@ -8,6 +8,27 @@
 #include <string.h>
 #include <math.h>
 
+#define LOOP_COMBINE \
+    x1 = _mm_add_ps(                            \
+        _mm_movelh_ps(a[0], a[1]),              \
+        _mm_movehl_ps(a[1], a[0]));             \
+    x2 = _mm_add_ps(                            \
+        _mm_movelh_ps(a[2], a[3]),              \
+        _mm_movehl_ps(a[3], a[2]));             \
+                                                \
+    z1 = _mm_add_epi32(                         \
+        _mm_cvtps_epi32(x1),                    \
+        _mm_srli_epi32(dsv, 17));               \
+    dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);    \
+    z2 = _mm_add_epi32(                         \
+        _mm_cvtps_epi32(x2),                    \
+        _mm_srli_epi32(dsv, 17));               \
+    dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);    \
+                                                \
+    accr = _mm_packs_epi32(                     \
+        _mm_srai_epi32(z1, 15),                 \
+        _mm_srai_epi32(z2, 15))
+
 void
 lfr_resample_s16n2f32_sse2(
     lfr_fixed_t *pos, lfr_fixed_t inv_ratio, unsigned *dither,
@@ -16,9 +37,9 @@ lfr_resample_s16n2f32_sse2(
 {
     int i, j, log2nfilt, fn, ff0, ff1, off, flen, fidx0, fidx1;
     float accs0, accs1, ff0f, ff1f, f;
-    __m128i dati0lo, dati0hi, dati1lo, dati1hi, zv, acci0, acci1, accr;
+    __m128i dati0lo, dati0hi, dati1lo, dati1hi, zv, z1, z2, accr;
     __m128 ff0v, ff1v, fir0, fir1, fir2, fir3, dat0, dat1, dat2, dat3;
-    __m128 acc, acc_a, acc_b, acc0, acc1;
+    __m128 acc_a, acc_b, a[4], x1, x2;
     __m128i dsv, lcg_a, lcg_c;
     const __m128 *fd;
     lfr_fixed_t x;
@@ -44,8 +65,6 @@ lfr_resample_s16n2f32_sse2(
     lcg_c = _mm_set1_epi32(LCG_C4);
 
     zv = _mm_set1_epi32(0);
-    acc0 = _mm_set1_ps(0.0f);
-    acc1 = _mm_set1_ps(0.0f);
     for (i = 0; i < outlen; ++i) {
         /* fn: filter number
            ff0: filter factor for filter fn
@@ -125,38 +144,12 @@ lfr_resample_s16n2f32_sse2(
         }
 
     accumulate:
-        acc = _mm_add_ps(acc_a, acc_b);
-        switch (i & 3) {
-        case 0: case 2:
-            acc0 = acc;
-            break;
-
-        case 1:
-            acc1 = _mm_add_ps(
-                _mm_movelh_ps(acc0, acc),
-                _mm_movehl_ps(acc, acc0));
-            break;
-
-        case 3:
-            acc0 = _mm_add_ps(
-                _mm_movelh_ps(acc0, acc),
-                _mm_movehl_ps(acc, acc0));
-
-            acci0 = _mm_add_epi32(
-                _mm_cvtps_epi32(acc1),
-                _mm_srli_epi32(dsv, 17));
-            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
-            acci1 = _mm_add_epi32(
-                _mm_cvtps_epi32(acc0),
-                _mm_srli_epi32(dsv, 17));
-            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
-
-            accr = _mm_packs_epi32(
-                _mm_srai_epi32(acci0, 15),
-                _mm_srai_epi32(acci1, 15));
-
-            _mm_storeu_si128((__m128i *) out + (i >> 2), accr);
-            break;
+        a[i & 3] = _mm_add_ps(acc_a, acc_b);
+        if ((i & 3) == 3) {
+            LOOP_COMBINE;
+            _mm_storeu_si128(
+                (__m128i *) ((short *) out + (i - 3) * 2),
+                accr);
         }
 
         x += inv_ratio;
@@ -168,44 +161,11 @@ lfr_resample_s16n2f32_sse2(
     *pos = x;
     *dither = ds;
 
-    acc = _mm_set1_ps(0.0f);
-    if ((outlen & 3) == 0)
-        return;
-    for (i = outlen; ; ++i) {
-        switch (i & 3) {
-        case 0: case 2:
-            acc0 = acc;
-            break;
-
-        case 1:
-            acc1 = _mm_add_ps(
-                _mm_movelh_ps(acc0, acc),
-                _mm_movehl_ps(acc, acc0));
-            break;
-
-        case 3:
-            acc0 = _mm_add_ps(
-                _mm_movelh_ps(acc0, acc),
-                _mm_movehl_ps(acc, acc0));
-
-            acci0 = _mm_add_epi32(
-                _mm_cvtps_epi32(acc1),
-                _mm_srli_epi32(dsv, 17));
-            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
-            acci1 = _mm_add_epi32(
-                _mm_cvtps_epi32(acc0),
-                _mm_srli_epi32(dsv, 17));
-            dsv = lfr_rand_epu32(dsv, lcg_a, lcg_c);
-
-            accr = _mm_packs_epi32(
-                _mm_srai_epi32(acci0, 15),
-                _mm_srai_epi32(acci1, 15));
-
-            memcpy((__m128i *) out + (i >> 2), &accr, (outlen & 3) * 4);
-            return;
-        }
+    if ((outlen & 3) != 0) {
+        LOOP_COMBINE;
+        u.x = accr;
+        memcpy((short *) out + (outlen & ~3) * 2, &u, (outlen & 3) * 4);
     }
-
 }
 
 #endif
