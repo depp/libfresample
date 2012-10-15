@@ -93,7 +93,10 @@ def test_correct(depth, nchan, rate1, rate2):
         outputs.append((out1, out2))
     make.build(
         name, [x for y in outputs for x in y],
-        *(['cmp %s %s' % x for x in outputs] +
+        *(['$(FR) --test-bufsize --cpu-features %s -q %d -r %d %s /dev/null'
+           % (f, q, rate2, inpath)
+           for q in range(11) for f in ['none', 'all']] +
+          ['cmp %s %s' % x for x in outputs] +
           ['@echo === OUTPUT MATCHES ===']))
     make.phony('test', [name])
     make.add_default('test')

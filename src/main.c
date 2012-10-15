@@ -4,6 +4,7 @@
 #include "file.h"
 #include "fresample.h"
 
+#include <assert.h>
 #include <getopt.h>
 #include <math.h>
 #include <stdio.h>
@@ -23,7 +24,8 @@ enum {
     OPT_BENCH = 256,
     OPT_CPU_FEATURES,
     OPT_VERBOSE,
-    OPT_VERSION
+    OPT_VERSION,
+    OPT_TEST_BUFSIZE
 };
 
 static const struct option OPTIONS[] = {
@@ -32,6 +34,7 @@ static const struct option OPTIONS[] = {
     { "help", no_argument, NULL, OPT_HELP },
     { "quality", required_argument, NULL, OPT_QUALITY },
     { "rate", required_argument, NULL, OPT_RATE },
+    { "test-bufsize", no_argument, NULL, OPT_TEST_BUFSIZE },
     { "verbose", no_argument, NULL, OPT_VERBOSE },
     { "version", no_argument, NULL, OPT_VERSION },
     { NULL, 0, NULL, 0 }
@@ -130,6 +133,140 @@ static const char USAGE[] =
     "  --verbose            print extra information\n"
     "  --version            print version number\n";
 
+#define LCG_A  1103515245u
+#define LCG_C       12345u
+
+static void
+test_bufsize(struct lfr_filter *fp, struct audio *ain, struct audio *aout,
+             lfr_fixed_t inv_ratio, lfr_fixed_t pos0)
+{
+    int fsize, off, off0, len, minlen, i, j, nchan, ssize;
+    unsigned char *buf, *ref;
+    lfr_fixed_t pos;
+    unsigned dither, dither0, dither1;
+    char msgbuf[64];
+    const char *what;
+    short *px, *py;
+
+    nchan = ain->nchan;
+    ssize = (int) audio_format_size(aout->fmt) * nchan;
+    buf = xmalloc(ssize * 32 + 32);
+    ref = xmalloc(ssize * 32 + 32);
+    fsize = lfr_filter_size(fp);
+    minlen = fsize + (int) (inv_ratio >> 26) + 1;
+
+    if (ain->nframe < (size_t) minlen) {
+        fprintf(stderr,
+                "error: input too short for buffer size test\n"
+                "  length: %zu, minimum length: %d\n",
+                ain->nframe, minlen);
+        exit(1);
+    }
+
+    off0 = 0;
+    while (off0 * inv_ratio < pos0)
+        off0 += 1;
+    dither0 = DITHER_SEED;
+    for (i = 0; i < off0 * nchan; ++i)
+        dither0 = dither0 * LCG_A + LCG_C;
+
+    for (len = 1; len <= 16; ++len) {
+        dither1 = dither0;
+        for (i = 0; i < len * nchan; ++i)
+            dither1 = dither1 * LCG_A + LCG_C;
+        for (off = 0; off < 16; ++off) {
+            for (i = 0; i < 2; ++i) {
+                memset(buf, i ? 0xff : 0x00, ssize * 32 + 32);
+                pos = pos0 + off0 * inv_ratio;
+                dither = dither0;
+                lfr_resample(
+                    &pos, inv_ratio, &dither, nchan,
+                    buf + 16 + off, LFR_FMT_S16_NATIVE, len,
+                    ain->data, LFR_FMT_S16_NATIVE, ain->nframe,
+                    fp);
+
+                memset(ref, i ? 0xff : 0x00, ssize * 32 + 32);
+                memcpy(ref + 16 + off,
+                       (const char *) aout->data + ssize * off0,
+                       len * ssize);
+
+                if (memcmp(ref, buf, ssize * 32 + 32)) {
+                    for (j = 0; j < 16 + off; ++j) {
+                        if (ref[j] != buf[j])
+                            goto overrun;
+                    }
+                    for (j = 16 + off + ssize * len;
+                         j < ssize * 32 + 32; ++j)
+                    {
+                        if (ref[j] != buf[j])
+                            goto overrun;
+                    }
+                    px = xmalloc(ssize * len);
+                    py = xmalloc(ssize * len);
+                    memcpy(px, ref + 16 + off, ssize * len);
+                    memcpy(py, buf + 16 + off, ssize * len);
+                    if (verbose >= 1 || 1) {
+                        fprintf(stderr, "data: [ref] [buf] [delta]\n");
+                        for (j = 0; j < nchan * len; ++j) {
+                            fprintf(stderr, "  %2d  %6d  %6d  %6d\n",
+                                    j, px[j], py[j], py[j] - px[j]);
+                        }
+                    }
+                    for (j = 0; j < nchan * len; ++j)
+                        if (px[j] != py[j])
+                            break;
+                    assert(j < nchan * len);
+                    snprintf(msgbuf, sizeof(msgbuf),
+                             "invalid data at index %d", j);
+                    what = msgbuf;
+                    goto error;
+
+                overrun:
+                    snprintf(msgbuf, sizeof(msgbuf),
+                             "buffer overrun at offset %d",
+                             j - (16 + off));
+                    what = msgbuf;
+                    if (verbose >= 1 || 1) {
+                        fprintf(stderr, "data: [ref] [buf]\n");
+                        for (i = 0; i < ssize * 4 + 4; ++i) {
+                            fprintf(stderr, "%4d ", i * 8);
+                            for (j = 0; j < 8; ++j)
+                                fprintf(stderr, " %02x", ref[i*8 + j]);
+                            fputs("   ", stderr);
+                            for (j = 0; j < 8; ++j)
+                                fprintf(stderr, " %02x", buf[i*8 + j]);
+                            fputc('\n', stderr);
+                        }
+                    }
+                    goto error;
+                }
+
+                if (pos != pos0 + (off0 + len) * inv_ratio) {
+                    what = "incorrect final position";
+                    goto error;
+                }
+
+                if (dither1 != dither) {
+                    what = "incorrect final dither";
+                    goto error;
+                }
+            }
+        }
+    }
+
+    return;
+
+error:
+    fprintf(
+        stderr,
+        "error: buffer test failed\n"
+        "    len: %d, off: %d\n"
+        "    %s\n",
+        len, off, what);
+
+    exit(1);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -146,7 +283,7 @@ main(int argc, char *argv[])
     lfr_fixed_t pos, pos0, inv_ratio;
     unsigned dither;
     double time, speed;
-    int verbose = 0;
+    int test_bufsize_flag = 0;
 
     param = lfr_param_new();
     if (!param)
@@ -200,6 +337,10 @@ main(int argc, char *argv[])
 
         case OPT_VERBOSE:
             verbose += 1;
+            break;
+
+        case OPT_TEST_BUFSIZE:
+            test_bufsize_flag += 1;
             break;
 
         case ':':
@@ -311,6 +452,9 @@ main(int argc, char *argv[])
             }
             printf("%.3f\n", speed);
         }
+
+        if (test_bufsize_flag)
+            test_bufsize(fp, &ain, &aout, inv_ratio, pos0);
 
         lfr_filter_free(fp);
 
