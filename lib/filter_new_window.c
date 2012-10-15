@@ -45,25 +45,39 @@ static void
 lfr_filter_calculate_s16(short *data, int nsamp, int nfilt,
                          double offset, double cutoff, double beta)
 {
-    double x, x0, t, y, xscale, yscale;
-    short yi;
+    double x, x0, t, y, z, xscale, yscale, err;
     int i, j;
-    yscale = 32767.0 * 2.0 * cutoff / bessel_i0(beta);
+    double *a, sum, fac;
+
+    a = malloc(nsamp * sizeof(double));
+    if (!a)
+        abort(); /* FIXME: report an error */
+
+    yscale = 2.0 * cutoff / bessel_i0(beta);
     xscale = (8.0 * atan(1.0)) * cutoff;
     for (i = 0; i < nfilt; ++i) {
         x0 = (nsamp - 1) / 2 + offset * i;
+        sum = 0.0;
         for (j = 0; j < nsamp; ++j) {
             x = j - x0;
             t = x * (2.0 / (nsamp - 2));
             if (t <= -1.0 || t >= 1.0) {
-                yi = 0;
+                y = 0.0;
             } else {
                 y = yscale *
                     bessel_i0(beta * sqrt(1.0 - t * t)) *
                     sinc(xscale * x);
-                yi = (short) floor(y + 0.5);
             }
-            data[i * nsamp + j] = yi;
+            a[j] = y;
+            sum += y;
+        }
+        fac = 32767.0 / sum;
+        err = 0.0;
+        for (j = 0; j < nsamp; ++j) {
+            y = a[j] * fac + err;
+            z = floor(y + 0.5);
+            err = z - y;
+            data[i * nsamp + j] = (short) z;
         }
     }
 }
