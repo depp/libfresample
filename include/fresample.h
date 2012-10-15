@@ -399,6 +399,13 @@ LFR_PUBLIC int
 lfr_filter_size(const struct lfr_filter *fp);
 
 /*
+  Get the memory size of a filter.  This is the number of bytes used
+  by filter coefficients.
+*/
+LFR_PUBLIC int
+lfr_filter_memsize(const struct lfr_filter *fp);
+
+/*
   Get the delay of a filter, in fixed point.  Filters are causal, so
   you can subtract the filter delay from the position to create a
   non-causal filter with zero delay.

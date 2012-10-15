@@ -415,6 +415,15 @@ main(int argc, char *argv[])
         if (!fp)
             error("could not create filter");
 
+        if (verbose >= 1) {
+            fprintf(
+                stderr,
+                "Filter size: %d\n"
+                "Filter memsize: %d\n",
+                lfr_filter_size(fp),
+                lfr_filter_memsize(fp));
+        }
+
         pos0 = -lfr_filter_delay(fp);
 
         pos = pos0;
