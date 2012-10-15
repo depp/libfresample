@@ -47,11 +47,16 @@ lfr_filter_calculate_s16(short *data, int nsamp, int nfilt,
 {
     double x, x0, t, y, z, xscale, yscale, err;
     int i, j;
-    double *a, sum, fac;
+    double *a, sum, fac, scale;
 
     a = malloc(nsamp * sizeof(double));
     if (!a)
         abort(); /* FIXME: report an error */
+
+    if (nsamp <= 8)
+        scale = 31500;
+    else
+        scale = 32767;
 
     yscale = 2.0 * cutoff / bessel_i0(beta);
     xscale = (8.0 * atan(1.0)) * cutoff;
@@ -71,7 +76,7 @@ lfr_filter_calculate_s16(short *data, int nsamp, int nfilt,
             a[j] = y;
             sum += y;
         }
-        fac = 32767.0 / sum;
+        fac = scale / sum;
         err = 0.0;
         for (j = 0; j < nsamp; ++j) {
             y = a[j] * fac + err;
