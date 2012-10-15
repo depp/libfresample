@@ -362,7 +362,7 @@ flen3:
 done:
     u.vw[0] = dsv;
     ds = u.w[0];
-    for (i = 0; i < (outlen & 7); ++i)
+    for (i = 0; i < (outlen & 3) * 2; ++i)
         ds = LCG_A * ds + LCG_C;
     *pos = x;
     *dither = ds;
@@ -381,7 +381,7 @@ done:
     u.vh[1] = out1;
     i = outlen & ~3;
     /* byte offset of data point i in (out0, out1) */
-    off = 4*i - (((int) (uintptr_t) out + 2*i) & 15);
+    off = 4*i - (((int) (uintptr_t) out + 4*i) & 15);
     a0 = off < 0 ? -off : 0;
     a1 = outlen * 4 - off;
     if (a1 > 32)

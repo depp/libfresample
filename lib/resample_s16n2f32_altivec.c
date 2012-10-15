@@ -52,7 +52,7 @@ lfr_resample_s16n2f32_altivec(
     u.w[1] = LCG_C4;
     lcg_a = u.vw[0];
     lcg_c = vec_splat(lcg_a, 1);
-    lcg_a = vec_splat(lcg_c, 0);
+    lcg_a = vec_splat(lcg_a, 0);
 
     u.f[2] = 0.0f;
     u.f[3] = 0.0f;
@@ -252,20 +252,17 @@ lfr_resample_s16n2f32_altivec(
     }
 
 final:
-    /* byte offset of data point i in (out0, out1) */
-    off = (int) ((uintptr_t) out & 15) + 16;
-    if (off > 4*i)
-        a0 = off - 4*i;
-    else
-        a0 = 0;
-    if (off + 4*(outlen - i) > 32)
-        a1 = 32;
-    else
-        a1 = off + 4*(outlen - i);
-
     u.vh[0] = out0;
     u.vh[1] = out1;
-    memcpy((char *) out + 4*i - off + a0, (char *) &u + a0, a1 - a0);
+    i = outlen & ~3;
+    /* byte offset of data point i in (out0, out1) */
+    off = 4*i - (((int) (uintptr_t) out + 4*i) & 15);
+    a0 = off < 0 ? -off : 0;
+    a1 = outlen * 4 - off;
+    if (a1 > 32)
+        a1 = 32;
+    if (a1 > a0)
+        memcpy((char *) out + off + a0, (char *) &u + a0, a1 - a0);
 }
 
 #endif

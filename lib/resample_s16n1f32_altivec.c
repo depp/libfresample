@@ -51,7 +51,7 @@ lfr_resample_s16n1f32_altivec(
     u.w[1] = LCG_C4;
     lcg_a = u.vw[0];
     lcg_c = vec_splat(lcg_a, 1);
-    lcg_a = vec_splat(lcg_c, 0);
+    lcg_a = vec_splat(lcg_a, 0);
 
     u.f[2] = 0.0f;
     u.f[3] = 0.0f;
@@ -213,7 +213,6 @@ lfr_resample_s16n1f32_altivec(
     acc = zv;
     if ((outlen & 7) == 0) {
         out0 = vec_perm(out0, out0, store_perm);
-        i = outlen + 8;
         goto final;
     }
     for (i = outlen; ; ++i) {
@@ -261,20 +260,17 @@ lfr_resample_s16n1f32_altivec(
     }
 
 final:
-    /* byte offset of data point i in (out0, out1) */
-    off = (int) ((uintptr_t) out & 15) + 16;
-    if (off > 2*i)
-        a0 = off - 2*i;
-    else
-        a0 = 0;
-    if (off + 2*(outlen - i) > 32)
-        a1 = 32;
-    else
-        a1 = off + 2*(outlen - i);
-
     u.vh[0] = out0;
     u.vh[1] = out1;
-    memcpy((char *) out + 2*i - off + a0, (char *) &u + a0, a1 - a0);
+    i = outlen & ~7;
+    /* byte offset of where out0 belongs relative to out */
+    off = 2*i - (((int) (uintptr_t) out + 2*i) & 15);
+    a0 = off < 0 ? -off : 0;
+    a1 = outlen * 2 - off;
+    if (a1 > 32)
+        a1 = 32;
+    if (a1 > a0)
+        memcpy((char *) out + off + a0, (char *) &u + a0, a1 - a0);
 }
 
 #endif
