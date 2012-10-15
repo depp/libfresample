@@ -183,7 +183,7 @@ lfr_resample_s16n2f32_sse2(
                 _mm_movehl_ps(acc, acc0));
             break;
 
-        case 7:
+        case 3:
             acc0 = _mm_add_ps(
                 _mm_movelh_ps(acc0, acc),
                 _mm_movehl_ps(acc, acc0));
@@ -201,7 +201,7 @@ lfr_resample_s16n2f32_sse2(
                 _mm_srai_epi32(acci0, 15),
                 _mm_srai_epi32(acci1, 15));
 
-            memcpy((__m128i *) out + (i >> 2), &accr, (outlen & 3) * 2);
+            memcpy((__m128i *) out + (i >> 2), &accr, (outlen & 3) * 4);
             return;
         }
     }

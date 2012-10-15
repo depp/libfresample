@@ -521,7 +521,7 @@ final:
 
     /* Store remaing bytes */
     acc = _mm_set1_epi32(0);
-    if ((i & 3) == 0)
+    if ((outlen & 3) == 0)
         return;
     for (i = outlen; ; ++i) {
         switch (i & 3) {
