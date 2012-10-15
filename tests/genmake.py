@@ -86,10 +86,10 @@ def test_correct(depth, nchan, rate1, rate2):
         out2 = outpath + '_2.wav'
         make.build(
             out1, [inpath, '$(FR)', 'Makefile'],
-            '$(FR) -c none -q %d -r %d $< $@' % (q, rate2))
+            '$(FR) --cpu-features none -q %d -r %d $< $@' % (q, rate2))
         make.build(
             out2, [inpath, '$(FR)', 'Makefile'],
-            '$(FR) -c all -q %d -r %d $< $@' % (q, rate2))
+            '$(FR) --cpu-features all -q %d -r %d $< $@' % (q, rate2))
         outputs.append((out1, out2))
     make.build(
         name, [x for y in outputs for x in y],

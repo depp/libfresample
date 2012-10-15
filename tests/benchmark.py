@@ -29,10 +29,10 @@ def benchmark(depth, nchan, rate1, rate2, length, q, itercount):
             (depth, nchan, rate1, rate2, q, c))
         proc = subprocess.Popen(
             ['../build/product/fresample',
-             '-q', str(q), '-r', str(rate2), '-c', c, '-b', str(itercount),
+             '-q', str(q), '-r', str(rate2),
+             '--cpu-features=' + c, '--benchmark=' + str(itercount),
              infile, 'bench_out.wav'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
+            stdout=subprocess.PIPE)
         out, err = proc.communicate()
         if proc.returncode:
             sys.stderr.write('process failed\n')

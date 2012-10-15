@@ -4,6 +4,7 @@
 #include "file.h"
 #include "fresample.h"
 
+#include <getopt.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,6 +13,29 @@
 #include <unistd.h>
 
 #define DITHER_SEED 0xc90fdaa2
+
+static int verbose = 0;
+
+enum {
+    OPT_HELP = 'h',
+    OPT_QUALITY = 'q',
+    OPT_RATE = 'r',
+    OPT_BENCH = 256,
+    OPT_CPU_FEATURES,
+    OPT_VERBOSE,
+    OPT_VERSION
+};
+
+static const struct option OPTIONS[] = {
+    { "benchmark", required_argument, NULL, OPT_BENCH },
+    { "cpu-features", required_argument, NULL, OPT_CPU_FEATURES },
+    { "help", no_argument, NULL, OPT_HELP },
+    { "quality", required_argument, NULL, OPT_QUALITY },
+    { "rate", required_argument, NULL, OPT_RATE },
+    { "verbose", no_argument, NULL, OPT_VERBOSE },
+    { "version", no_argument, NULL, OPT_VERSION },
+    { NULL, 0, NULL, 0 }
+};
 
 static void
 cpu_features_set(const char *str)
@@ -62,6 +86,9 @@ cpu_features_set(const char *str)
     }
 
     flags = lfr_setcpufeatures(flags);
+    if (verbose < 1)
+        return;
+
     has_feature = 0;
     fputs("CPU features enabled: ", stderr);
     for (i = 0; LFR_CPUF[i].name[0]; ++i) {
@@ -93,16 +120,21 @@ nchan_format(char *buf, size_t buflen, int nchan)
 }
 
 static const char USAGE[] =
-    "usage:\n"
-    "  fresample [-r RATE] [-q QUALITY] IN OUT\n"
-    "  fresample -h\n"
-    "  fresample -v\n";
+    "usage: fresample [OPTION..] IN OUT\n"
+    "options:\n"
+    "  --benchmark N        benchmark by converting N times, print speed\n"
+    "  --cpu-features LIST  allow only CPU features in LIST\n"
+    "  -h, --help           show this help screen\n"
+    "  -q, --quality Q      set conversion quality 0..10\n"
+    "  -r, --rate R         set target sample rate\n"
+    "  --verbose            print extra information\n"
+    "  --version            print version number\n";
 
 int
 main(int argc, char *argv[])
 {
     long v, benchmark, bi;
-    int rate, opt, nfiles;
+    int rate, opt, nfiles, longindex = 0;
     size_t len;
     struct file_data din;
     struct audio ain, aout;
@@ -114,6 +146,7 @@ main(int argc, char *argv[])
     lfr_fixed_t pos, pos0, inv_ratio;
     unsigned dither;
     double time, speed;
+    int verbose = 0;
 
     param = lfr_param_new();
     if (!param)
@@ -121,9 +154,11 @@ main(int argc, char *argv[])
     benchmark = -1;
     nfiles = 0;
     rate = -1;
-    while ((opt = getopt(argc, argv, ":b:c:hq:r:v")) != -1) {
+    while ((opt = getopt_long(argc, argv, ":hq:r:",
+                              OPTIONS, &longindex)) != -1)
+    {
         switch (opt) {
-        case 'b':
+        case OPT_BENCH:
             benchmark = strtol(optarg, &e, 10);
             if (!*optarg || *e || benchmark < 1) {
                 fprintf(stderr, "error: invalid benchmark count '%s'\n",
@@ -132,15 +167,15 @@ main(int argc, char *argv[])
             }
             break;
 
-        case 'c':
+        case OPT_CPU_FEATURES:
             cpu_features_set(optarg);
             break;
 
-        case 'h':
+        case OPT_HELP:
             fputs(USAGE, stderr);
             return 1;
 
-        case 'q':
+        case OPT_QUALITY:
             v = strtol(optarg, &e, 10);
             if (!*optarg || *e) {
                 fprintf(stderr, "error: invalid quality '%s'\n", optarg);
@@ -151,7 +186,7 @@ main(int argc, char *argv[])
             lfr_param_seti(param, LFR_PARAM_QUALITY, (int) v);
             break;
 
-        case 'r':
+        case OPT_RATE:
             rate = audio_rate_parse(optarg);
             if (rate < 0) {
                 fprintf(stderr, "error: invalid sample rate '%s'\n", argv[1]);
@@ -159,8 +194,12 @@ main(int argc, char *argv[])
             }
             break;
 
-        case 'v':
+        case OPT_VERSION:
             fputs("FResample version 0.0\n", stdout);
+            break;
+
+        case OPT_VERBOSE:
+            verbose += 1;
             break;
 
         case ':':
@@ -198,16 +237,20 @@ main(int argc, char *argv[])
 
     audio_rate_format(frate, sizeof(frate), ain.rate);
     nchan_format(fnchan, sizeof(fnchan), ain.nchan);
-    fprintf(stderr,
-            "Input: %s, %s, %s, %zu samples\n",
-            audio_format_name(ain.fmt), frate, fnchan, ain.nframe);
+    if (verbose >= 1) {
+        fprintf(stderr,
+                "Input: %s, %s, %s, %zu samples\n",
+                audio_format_name(ain.fmt), frate, fnchan, ain.nframe);
+    }
 
     if (ain.nchan != 1 && ain.nchan != 2)
         error("unsupported number of channels "
               "(only mono and stereo supported)");
 
     if (ain.rate == aout.rate) {
-        fputs("No rate conversion necessary\n", stdout);
+        if (verbose >= 1) {
+            fputs("No rate conversion necessary\n", stderr);
+        }
         audio_alias(&aout, &ain);
     } else {
         audio_convert(&ain, LFR_FMT_S16_NATIVE);
@@ -215,9 +258,11 @@ main(int argc, char *argv[])
             (double) ain.nframe * (double) rate / (double) ain.rate + 0.5);
 
         audio_rate_format(frate, sizeof(frate), rate);
-        fprintf(stderr,
-                "Output: %s, %s, %s, %zu samples\n",
-                audio_format_name(ain.fmt), frate, fnchan, len);
+        if (verbose >= 1) {
+            fprintf(stderr,
+                    "Output: %s, %s, %s, %zu samples\n",
+                    audio_format_name(ain.fmt), frate, fnchan, len);
+        }
         audio_alloc(&aout, len, ain.fmt, ain.nchan, rate);
 
         inv_ratio =
@@ -256,11 +301,14 @@ main(int argc, char *argv[])
             speed = 
                 ((double) CLOCKS_PER_SEC * benchmark * ain.nframe) /
                 (time * ain.rate);
-            fprintf(
-                stderr,
-                "Average time: %g s\n"
-                "Speed: %g\n",
-                (t1 - t0) / ((double) CLOCKS_PER_SEC * benchmark), speed);
+            if (verbose >= 1) {
+                fprintf(
+                    stderr,
+                    "Average time: %g s\n"
+                    "Speed: %g\n",
+                    (t1 - t0) / ((double) CLOCKS_PER_SEC * benchmark),
+                    speed);
+            }
             printf("%.3f\n", speed);
         }
 
