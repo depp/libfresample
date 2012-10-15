@@ -98,7 +98,9 @@ def test_correct(depth, nchan, rate1, rate2):
            for q in range(11) for f in ['none', 'all']] +
           ['cmp %s %s' % x for x in outputs] +
           ['@echo === OUTPUT MATCHES ===']))
-    make.phony('test', [name])
+    name2 = 'test-' + { 1: 'mono', 2: 'stereo' }.get(nchan, 'n%d' % nchan)
+    make.phony(name2, [name])
+    make.phony('test', [name2])
     make.add_default('test')
 
 test_correct(16, 1, 48000, 44100)            
