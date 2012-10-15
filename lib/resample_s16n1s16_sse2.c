@@ -92,6 +92,7 @@ lfr_resample_s16n1s16_sse2(
     lcg_c = _mm_set1_epi32(LCG_C4);
 
     switch (flen) {
+    case 1: goto flen1;
     case 2: goto flen2;
     case 3: goto flen3;
     default: goto flenv;
@@ -162,6 +163,68 @@ flenv:
         }
 
     flenv_accumulate:
+        LOOP_STORE;
+
+        x += inv_ratio;
+    }
+    goto final;
+
+flen1:
+    for (i = 0; i < outlen; ++i) {
+        LOOP_FIRCOEFF;
+
+        /* off: offset in input corresponding to first sample in
+           filter */
+        off = (int) (x >> 32);
+        /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
+           of whole FIR data we will use */
+        fidx0 = (-off + 7) >> 3;
+        fidx1 = (inlen - off) >> 3;
+        if (fidx0 > 0)
+            goto flen1_slow;
+        if (fidx1 < 1)
+            goto flen1_slow;
+
+        dat0 = _mm_loadu_si128(
+            (const __m128i *)
+            ((const short *) in + off));
+        fir0 = fd[fn+0];
+        fir1 = fd[fn+1];
+        fir0 = _mm_packs_epi32(
+            _mm_srai_epi32(
+                _mm_madd_epi16(
+                    _mm_unpacklo_epi16(fir0, fir1),
+                    fir_interp),
+                INTERP_BITS),
+            _mm_srai_epi32(
+                _mm_madd_epi16(
+                    _mm_unpackhi_epi16(fir0, fir1),
+                    fir_interp),
+                INTERP_BITS));
+
+        acc = _mm_madd_epi16(dat0, fir0);
+
+        goto flen1_accumulate;
+
+    flen1_slow:
+        fidx0 = -off;
+        if (fidx0 < 0)
+            fidx0 = 0;
+        fidx1 = inlen - off;
+        if (fidx1 > 8)
+            fidx1 = 8;
+
+        accs = 0;
+        for (j = fidx0; j < fidx1; ++j) {
+            f = (((const short *) fd)[(fn+0) * 8 + j] * ff0 +
+                 ((const short *) fd)[(fn+1) * 8 + j] * ff1)
+                >> INTERP_BITS;
+            accs += ((const short *) in)[j + off] * f;
+        }
+        acc = _mm_cvtsi32_si128(accs);
+        goto flen1_accumulate;
+
+    flen1_accumulate:
         LOOP_STORE;
 
         x += inv_ratio;
