@@ -57,11 +57,12 @@ def test_sweep(depth, nchan, rate1, rate2):
         name2 = '%s_r%dq%02d' % (name, rate2 // 1000, q);
         make.build(
             name2 + '.wav', [name + '.wav', '$(FR)', 'Makefile'],
-            '$(FR) -q %d -r %d $< $@' % (q, rate2))
+            '$(FR) $(FRFLAGS) -q %d -r %d $< $@' % (q, rate2))
         make.build(
             name2 + '.png', [name2 + '.wav', 'Makefile'],
             'sox $< -n spectrogram -w kaiser -o $@')
         sweeps.append(name2 + '.png')
+        make.phony('sweep-q%d' % q, [name2 + '.png'])
     make.phony('sweep-mono' if nchan == 1 else 'sweep-stereo', sweeps);
 
 test_sweep(16, 1, 96000, 44100)
@@ -86,10 +87,12 @@ def test_correct(depth, nchan, rate1, rate2):
         out2 = outpath + '_2.wav'
         make.build(
             out1, [inpath, '$(FR)', 'Makefile'],
-            '$(FR) --cpu-features none -q %d -r %d $< $@' % (q, rate2))
+            '$(FR) $(FRFLAGS) --cpu-features none -q %d -r %d $< $@' %
+            (q, rate2))
         make.build(
             out2, [inpath, '$(FR)', 'Makefile'],
-            '$(FR) --cpu-features all -q %d -r %d $< $@' % (q, rate2))
+            '$(FR) $(FRFLAGS) --cpu-features all -q %d -r %d $< $@' %
+            (q, rate2))
         outputs.append((out1, out2))
     make.build(
         name, [x for y in outputs for x in y],
