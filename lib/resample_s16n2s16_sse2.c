@@ -6,14 +6,16 @@
 #include "resample.h"
 #include <string.h>
 
-#define LOOP_FIRCOEFF \
+#define LOOP_FIRCOEFF_SCALAR \
     fn = (((unsigned) x >> 1) >> (31 - log2nfilt)) &            \
         ((1u << log2nfilt) - 1);                                \
     ff1 = ((unsigned) x >> (32 - log2nfilt - INTERP_BITS)) &    \
         ((1u << INTERP_BITS) - 1);                              \
-    ff0 = (1u << INTERP_BITS) - ff1;                            \
-    fir_interp = _mm_set1_epi32(ff0 | (ff1 << 16));
+    ff0 = (1u << INTERP_BITS) - ff1
 
+#define LOOP_FIRCOEFF \
+    LOOP_FIRCOEFF_SCALAR; \
+    fir_interp = _mm_set1_epi32(ff0 | (ff1 << 16));
 
 #define LOOP_COMBINE \
     x1 = _mm_add_epi32(                                 \
@@ -41,6 +43,38 @@
             acc);                                       \
     }
 
+#define LOOP_COMPUTE(flen, j) \
+    dat0 = _mm_loadu_si128(                         \
+        (const __m128i *)                           \
+        ((const short *) in + off*2 + (j)*16));     \
+    dat1 = _mm_loadu_si128(                         \
+        (const __m128i *)                           \
+        ((const short *) in + off*2 + (j)*16+8));   \
+    fir0 = fd[(fn+0)*(flen) + (j)];                 \
+    fir1 = fd[(fn+1)*(flen) + (j)];                 \
+                                                    \
+    fir0 = _mm_packs_epi32(                         \
+        _mm_srai_epi32(                             \
+            _mm_madd_epi16(                         \
+                _mm_unpacklo_epi16(fir0, fir1),     \
+                fir_interp),                        \
+            INTERP_BITS),                           \
+        _mm_srai_epi32(                             \
+            _mm_madd_epi16(                         \
+                _mm_unpackhi_epi16(fir0, fir1),     \
+                fir_interp),                        \
+            INTERP_BITS));                          \
+                                                    \
+    fir1 = _mm_unpackhi_epi16(fir0, fir0);          \
+    fir0 = _mm_unpacklo_epi16(fir0, fir0);          \
+                                                    \
+    x1 = _mm_madd_epi16(                            \
+        _mm_unpacklo_epi16(dat0, dat1),             \
+        _mm_unpacklo_epi16(fir0, fir1));            \
+    x2 = _mm_madd_epi16(                            \
+        _mm_unpackhi_epi16(dat0, dat1),             \
+        _mm_unpackhi_epi16(fir0, fir1))
+
 void
 lfr_resample_s16n2s16_sse2(
     lfr_fixed_t *pos, lfr_fixed_t inv_ratio, unsigned *dither,
@@ -52,7 +86,7 @@ lfr_resample_s16n2s16_sse2(
     lfr_fixed_t x;
 
     __m128i acc, fir0, fir1, fir_interp, dat0, dat1;
-    __m128i acc_a, acc_b, a[4], x1, x2;
+    __m128i a[4], x1, x2;
     __m128i dsv, lcg_a, lcg_c;
     int fn, ff0, ff1, off, fidx0, fidx1;
     int accs0, accs1, i, j, f;
@@ -80,14 +114,12 @@ lfr_resample_s16n2s16_sse2(
     lcg_a = _mm_set1_epi32(LCG_A4);
     lcg_c = _mm_set1_epi32(LCG_C4);
 
-    switch (flen) {
-    case 1: goto flen1;
-    case 2: goto flen2;
-    case 3: goto flen3;
-    default: goto flenv;
-    }
+    if (flen >= 1 && flen <= 3 && inv_ratio >= 0 && inlen >= flen * 8)
+        goto fast;
+    else
+        goto flex;
 
-flenv:
+flex:
     for (i = 0; i < outlen; ++i) {
         LOOP_FIRCOEFF;
 
@@ -137,38 +169,8 @@ flenv:
         }
 
         for (j = fidx0; j < fidx1; ++j) {
-            dat0 = _mm_loadu_si128(
-                (const __m128i *)
-                ((const short *) in + off*2 + j*16));
-            dat1 = _mm_loadu_si128(
-                (const __m128i *)
-                ((const short *) in + off*2 + j*16+8));
-            fir0 = fd[(fn+0)*flen + j];
-            fir1 = fd[(fn+1)*flen + j];
-
-            fir0 = _mm_packs_epi32(
-                _mm_srai_epi32(
-                    _mm_madd_epi16(
-                        _mm_unpacklo_epi16(fir0, fir1),
-                        fir_interp),
-                    INTERP_BITS),
-                _mm_srai_epi32(
-                    _mm_madd_epi16(
-                        _mm_unpackhi_epi16(fir0, fir1),
-                        fir_interp),
-                    INTERP_BITS));
-
-            fir1 = _mm_unpackhi_epi16(fir0, fir0);
-            fir0 = _mm_unpacklo_epi16(fir0, fir0);
-            acc = _mm_add_epi32(
-                acc,
-                _mm_add_epi32(
-                    _mm_madd_epi16(
-                        _mm_unpacklo_epi16(dat0, dat1),
-                        _mm_unpacklo_epi16(fir0, fir1)),
-                    _mm_madd_epi16(
-                        _mm_unpackhi_epi16(dat0, dat1),
-                        _mm_unpackhi_epi16(fir0, fir1))));
+            LOOP_COMPUTE(flen, j);
+            acc = _mm_add_epi32(acc, _mm_add_epi32(x1, x2));
         }
 
     flenv_accumulate:
@@ -178,345 +180,108 @@ flenv:
     }
     goto final;
 
-flen1:
-    for (i = 0; i < outlen; ++i) {
-        LOOP_FIRCOEFF;
+fast:
+    i = 0;
+    for (; i < outlen; ++i) {
+        LOOP_FIRCOEFF_SCALAR;
 
-        /* off: offset in input corresponding to first sample in
-           filter */
         off = (int) (x >> 32);
-        /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
-           of whole FIR data we will use */
-        fidx0 = (-off + 7) >> 3;
-        fidx1 = (inlen - off) >> 3;
-        if (fidx0 > 0)
-            goto flen1_slow;
-        if (fidx1 < 1)
-            goto flen1_slow;
+        if (off >= 0)
+            break;
 
-        dat0 = _mm_loadu_si128(
-            (const __m128i *)
-            ((const short *) in + off*2 + 0));
-        dat1 = _mm_loadu_si128(
-            (const __m128i *)
-            ((const short *) in + off*2 + 8));
-        fir0 = fd[fn+0];
-        fir1 = fd[fn+1];
-
-        fir0 = _mm_packs_epi32(
-            _mm_srai_epi32(
-                _mm_madd_epi16(
-                    _mm_unpacklo_epi16(fir0, fir1),
-                    fir_interp),
-                INTERP_BITS),
-            _mm_srai_epi32(
-                _mm_madd_epi16(
-                    _mm_unpackhi_epi16(fir0, fir1),
-                    fir_interp),
-                INTERP_BITS));
-
-        fir1 = _mm_unpackhi_epi16(fir0, fir0);
-        fir0 = _mm_unpacklo_epi16(fir0, fir0);
-        acc_a = _mm_madd_epi16(
-            _mm_unpacklo_epi16(dat0, dat1),
-            _mm_unpacklo_epi16(fir0, fir1));
-        acc_b = _mm_madd_epi16(
-            _mm_unpackhi_epi16(dat0, dat1),
-            _mm_unpackhi_epi16(fir0, fir1));
-
-        acc = _mm_add_epi32(acc_a, acc_b);
-
-        goto flen1_accumulate;
-
-    flen1_slow:
         fidx0 = -off;
-        if (fidx0 < 0)
-            fidx0 = 0;
-        fidx1 = inlen - off;
-        if (fidx1 > 8)
-            fidx1 = 8;
+        fidx1 = flen * 8;
 
         accs0 = 0;
         accs1 = 0;
         for (j = fidx0; j < fidx1; ++j) {
-            f = (((const short *) fd)[(fn+0) * 8 + j] * ff0 +
-                 ((const short *) fd)[(fn+1) * 8 + j] * ff1)
+            f = (((const short *) fd)[(fn+0) * (flen*8) + j] * ff0 +
+                 ((const short *) fd)[(fn+1) * (flen*8) + j] * ff1)
                 >> INTERP_BITS;
             accs0 += ((const short *) in)[(j + off)*2 + 0] * f;
             accs1 += ((const short *) in)[(j + off)*2 + 1] * f;
         }
         acc = _mm_set_epi32(0, 0, accs1, accs0);
-        goto flen1_accumulate;
 
-
-    flen1_accumulate:
         LOOP_STORE;
-
         x += inv_ratio;
     }
-    goto final;
 
-flen2:
-    for (i = 0; i < outlen; ++i) {
-        LOOP_FIRCOEFF;
+    switch (flen) {
+    case 1:
+        for (; i < outlen; ++i) {
+            LOOP_FIRCOEFF;
+            off = (int) (x >> 32);
+            if (off + 8 > inlen)
+                break;
 
-        /* off: offset in input corresponding to first sample in
-           filter */
+            LOOP_COMPUTE(1, 0);
+            acc = _mm_add_epi32(x1, x2);
+            LOOP_STORE;
+            x += inv_ratio;
+        }
+        break;
+
+    case 2:
+        for (; i < outlen; ++i) {
+            LOOP_FIRCOEFF;
+            off = (int) (x >> 32);
+            if (off + 16 > inlen)
+                break;
+
+            LOOP_COMPUTE(2, 0);
+            acc = _mm_add_epi32(x1, x2);
+            LOOP_COMPUTE(2, 1);
+            acc = _mm_add_epi32(acc, _mm_add_epi32(x1, x2));
+            LOOP_STORE;
+
+            x += inv_ratio;
+        }
+        break;
+
+    case 3:
+        for (; i < outlen; ++i) {
+            LOOP_FIRCOEFF;
+            off = (int) (x >> 32);
+            if (off + 24 > inlen)
+                break;
+
+            LOOP_COMPUTE(3, 0);
+            acc = _mm_add_epi32(x1, x2);
+            LOOP_COMPUTE(3, 1);
+            acc = _mm_add_epi32(acc, _mm_add_epi32(x1, x2));
+            LOOP_COMPUTE(3, 2);
+            acc = _mm_add_epi32(acc, _mm_add_epi32(x1, x2));
+            LOOP_STORE;
+
+            x += inv_ratio;
+        }
+        break;
+    }
+
+    for (; i < outlen; ++i) {
+        LOOP_FIRCOEFF_SCALAR;
+
         off = (int) (x >> 32);
-        /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
-           of whole FIR data we will use */
-        fidx0 = (-off + 7) >> 3;
-        fidx1 = (inlen - off) >> 3;
-        if (fidx0 > 0)
-            goto flen2_slow;
-        if (fidx1 < 2)
-            goto flen2_slow;
 
-        dat0 = _mm_loadu_si128(
-            (const __m128i *)
-            ((const short *) in + off*2 + 0));
-        dat1 = _mm_loadu_si128(
-            (const __m128i *)
-            ((const short *) in + off*2 + 8));
-        fir0 = fd[(fn+0)*2 + 0];
-        fir1 = fd[(fn+1)*2 + 0];
-
-        fir0 = _mm_packs_epi32(
-            _mm_srai_epi32(
-                _mm_madd_epi16(
-                    _mm_unpacklo_epi16(fir0, fir1),
-                    fir_interp),
-                INTERP_BITS),
-            _mm_srai_epi32(
-                _mm_madd_epi16(
-                    _mm_unpackhi_epi16(fir0, fir1),
-                    fir_interp),
-                INTERP_BITS));
-
-        fir1 = _mm_unpackhi_epi16(fir0, fir0);
-        fir0 = _mm_unpacklo_epi16(fir0, fir0);
-        acc_a = _mm_madd_epi16(
-            _mm_unpacklo_epi16(dat0, dat1),
-            _mm_unpacklo_epi16(fir0, fir1));
-        acc_b = _mm_madd_epi16(
-            _mm_unpackhi_epi16(dat0, dat1),
-            _mm_unpackhi_epi16(fir0, fir1));
-
-        dat0 = _mm_loadu_si128(
-            (const __m128i *)
-            ((const short *) in + off*2 + 16));
-        dat1 = _mm_loadu_si128(
-            (const __m128i *)
-            ((const short *) in + off*2 + 24));
-        fir0 = fd[(fn+0)*2 + 1];
-        fir1 = fd[(fn+1)*2 + 1];
-
-        fir0 = _mm_packs_epi32(
-            _mm_srai_epi32(
-                _mm_madd_epi16(
-                    _mm_unpacklo_epi16(fir0, fir1),
-                    fir_interp),
-                INTERP_BITS),
-            _mm_srai_epi32(
-                _mm_madd_epi16(
-                    _mm_unpackhi_epi16(fir0, fir1),
-                    fir_interp),
-                INTERP_BITS));
-
-        fir1 = _mm_unpackhi_epi16(fir0, fir0);
-        fir0 = _mm_unpacklo_epi16(fir0, fir0);
-        acc_a = _mm_add_epi32(
-            acc_a,
-            _mm_madd_epi16(
-                _mm_unpacklo_epi16(dat0, dat1),
-                _mm_unpacklo_epi16(fir0, fir1)));
-        acc_b = _mm_add_epi32(
-            acc_b,
-            _mm_madd_epi16(
-                _mm_unpackhi_epi16(dat0, dat1),
-                _mm_unpackhi_epi16(fir0, fir1)));
-
-        acc = _mm_add_epi32(acc_a, acc_b);
-
-        goto flen2_accumulate;
-
-    flen2_slow:
-        fidx0 = -off;
-        if (fidx0 < 0)
-            fidx0 = 0;
+        fidx0 = 0;
         fidx1 = inlen - off;
-        if (fidx1 > 16)
-            fidx1 = 16;
 
         accs0 = 0;
         accs1 = 0;
         for (j = fidx0; j < fidx1; ++j) {
-            f = (((const short *) fd)[(fn+0) * 16 + j] * ff0 +
-                 ((const short *) fd)[(fn+1) * 16 + j] * ff1)
+            f = (((const short *) fd)[(fn+0) * (flen*8) + j] * ff0 +
+                 ((const short *) fd)[(fn+1) * (flen*8) + j] * ff1)
                 >> INTERP_BITS;
             accs0 += ((const short *) in)[(j + off)*2 + 0] * f;
             accs1 += ((const short *) in)[(j + off)*2 + 1] * f;
         }
         acc = _mm_set_epi32(0, 0, accs1, accs0);
-        goto flen2_accumulate;
 
-
-    flen2_accumulate:
         LOOP_STORE;
-
         x += inv_ratio;
     }
-    goto final;
 
-flen3:
-    for (i = 0; i < outlen; ++i) {
-        LOOP_FIRCOEFF;
-
-        /* acc: FIR accumulator, used for accumulating 32-bit values
-           in the format L R L R.  This corresponds to one frame of
-           output, so the pair of values for left and the pair for
-           right have to be summed later.  */
-        acc = _mm_set1_epi32(0);
-        /* off: offset in input corresponding to first sample in
-           filter */
-        off = (int) (x >> 32);
-        /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
-           of whole FIR data we will use */
-        fidx0 = (-off + 7) >> 3;
-        fidx1 = (inlen - off) >> 3;
-        if (fidx0 > 0)
-            goto flen3_slow;
-        if (fidx1 < 3)
-            goto flen3_slow;
-
-        dat0 = _mm_loadu_si128(
-            (const __m128i *)
-            ((const short *) in + off*2 + 0));
-        dat1 = _mm_loadu_si128(
-            (const __m128i *)
-            ((const short *) in + off*2 + 8));
-        fir0 = fd[(fn+0)*3 + 0];
-        fir1 = fd[(fn+1)*3 + 0];
-
-        fir0 = _mm_packs_epi32(
-            _mm_srai_epi32(
-                _mm_madd_epi16(
-                    _mm_unpacklo_epi16(fir0, fir1),
-                    fir_interp),
-                INTERP_BITS),
-            _mm_srai_epi32(
-                _mm_madd_epi16(
-                    _mm_unpackhi_epi16(fir0, fir1),
-                    fir_interp),
-                INTERP_BITS));
-
-        fir1 = _mm_unpackhi_epi16(fir0, fir0);
-        fir0 = _mm_unpacklo_epi16(fir0, fir0);
-        acc_a = _mm_madd_epi16(
-            _mm_unpacklo_epi16(dat0, dat1),
-            _mm_unpacklo_epi16(fir0, fir1));
-        acc_b = _mm_madd_epi16(
-            _mm_unpackhi_epi16(dat0, dat1),
-            _mm_unpackhi_epi16(fir0, fir1));
-
-        dat0 = _mm_loadu_si128(
-            (const __m128i *)
-            ((const short *) in + off*2 + 16));
-        dat1 = _mm_loadu_si128(
-            (const __m128i *)
-            ((const short *) in + off*2 + 24));
-        fir0 = fd[(fn+0)*3 + 1];
-        fir1 = fd[(fn+1)*3 + 1];
-
-        fir0 = _mm_packs_epi32(
-            _mm_srai_epi32(
-                _mm_madd_epi16(
-                    _mm_unpacklo_epi16(fir0, fir1),
-                    fir_interp),
-                INTERP_BITS),
-            _mm_srai_epi32(
-                _mm_madd_epi16(
-                    _mm_unpackhi_epi16(fir0, fir1),
-                    fir_interp),
-                INTERP_BITS));
-
-        fir1 = _mm_unpackhi_epi16(fir0, fir0);
-        fir0 = _mm_unpacklo_epi16(fir0, fir0);
-        acc_a = _mm_add_epi32(
-            acc_a,
-            _mm_madd_epi16(
-                _mm_unpacklo_epi16(dat0, dat1),
-                _mm_unpacklo_epi16(fir0, fir1)));
-        acc_b = _mm_add_epi32(
-            acc_b,
-            _mm_madd_epi16(
-                _mm_unpackhi_epi16(dat0, dat1),
-                _mm_unpackhi_epi16(fir0, fir1)));
-
-        dat0 = _mm_loadu_si128(
-            (const __m128i *)
-            ((const short *) in + off*2 + 32));
-        dat1 = _mm_loadu_si128(
-            (const __m128i *)
-            ((const short *) in + off*2 + 40));
-        fir0 = fd[(fn+0)*3 + 2];
-        fir1 = fd[(fn+1)*3 + 2];
-
-        fir0 = _mm_packs_epi32(
-            _mm_srai_epi32(
-                _mm_madd_epi16(
-                    _mm_unpacklo_epi16(fir0, fir1),
-                    fir_interp),
-                INTERP_BITS),
-            _mm_srai_epi32(
-                _mm_madd_epi16(
-                    _mm_unpackhi_epi16(fir0, fir1),
-                    fir_interp),
-                INTERP_BITS));
-
-        fir1 = _mm_unpackhi_epi16(fir0, fir0);
-        fir0 = _mm_unpacklo_epi16(fir0, fir0);
-        acc_a = _mm_add_epi32(
-            acc_a,
-            _mm_madd_epi16(
-                _mm_unpacklo_epi16(dat0, dat1),
-                _mm_unpacklo_epi16(fir0, fir1)));
-        acc_b = _mm_add_epi32(
-            acc_b,
-            _mm_madd_epi16(
-                _mm_unpackhi_epi16(dat0, dat1),
-                _mm_unpackhi_epi16(fir0, fir1)));
-
-        acc = _mm_add_epi32(acc_a, acc_b);
-
-        goto flen3_accumulate;
-
-    flen3_slow:
-        fidx0 = -off;
-        if (fidx0 < 0)
-            fidx0 = 0;
-        fidx1 = inlen - off;
-        if (fidx1 > 24)
-            fidx1 = 24;
-
-        accs0 = 0;
-        accs1 = 0;
-        for (j = fidx0; j < fidx1; ++j) {
-            f = (((const short *) fd)[(fn+0) * 24 + j] * ff0 +
-                 ((const short *) fd)[(fn+1) * 24 + j] * ff1)
-                >> INTERP_BITS;
-            accs0 += ((const short *) in)[(j + off)*2 + 0] * f;
-            accs1 += ((const short *) in)[(j + off)*2 + 1] * f;
-        }
-        acc = _mm_set_epi32(0, 0, accs1, accs0);
-        goto flen3_accumulate;
-
-
-    flen3_accumulate:
-        LOOP_STORE;
-
-        x += inv_ratio;
-    }
     goto final;
 
 final:
