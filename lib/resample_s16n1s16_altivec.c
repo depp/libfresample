@@ -36,7 +36,7 @@
                 zero),                  \
             fir_shift));                \
                                         \
-    acc = vec_msum(dat0, fir0, acc)
+    acc = vec_msum(dat, fir0, acc)
 
 #define LOOP_COMBINE \
     perm_lo64 = vec_add(perm_hi64, vec_splat_u8(8));                \
@@ -91,7 +91,8 @@ lfr_resample_s16n1s16_altivec(
     vector unsigned char perm_hi64 =
         { 0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23 };
     vector unsigned char perm_lo64, load_perm, store_perm;
-    vector signed short fir0, fir1, fir_interp, dat0, dat1, dat2, dat3;
+    vector signed short fir0, fir1, fir_interp;
+    vector signed short dat, dat0, dat1, dat2, dat3;
     vector signed short out0, out1;
     vector unsigned int acc_shift, fir_shift;
     vector signed int acc, a[8], zero;
@@ -108,6 +109,14 @@ lfr_resample_s16n1s16_altivec(
         vector signed int vs[2];
         vector unsigned int vw[2];
     } u;
+
+    if (inlen < 16 && 0) {
+        lfr_resample_s16n1s16_scalar(
+            pos, inv_ratio, dither,
+            out, outlen, in, inlen,
+            filter);
+        return;
+    }
 
     zero = vec_splat_s32(0);
     perm_lo64 = vec_add(perm_hi64, vec_splat_u8(8));
@@ -138,14 +147,12 @@ lfr_resample_s16n1s16_altivec(
     out0 = out1 = vec_splat_s16(0);
     store_perm = vec_lvsr(0, (short *) out);
 
-    switch (flen) {
-    case 1: goto flen1;
-    case 2: goto flen2;
-    case 3: goto flen3;
-    default: goto flenv;
-    }
+    if (flen >= 1 && flen <= 3 && inv_ratio >= 0 && inlen >= flen * 8)
+        goto fast;
+    else
+        goto flex;
 
-flenv:
+flex:
     for (i = 0; i < outlen; ++i) {
         LOOP_FIRCOEFF;
 
@@ -198,12 +205,12 @@ flenv:
             for (j = fidx0; j < fidx1; ++j) {
                 dat0 = dat1;
                 dat1 = vec_ld((j + 1) * 16 + off * 2, (short *) in);
-                dat0 = vec_perm(dat0, dat1, load_perm);
+                dat = vec_perm(dat0, dat1, load_perm);
                 LOOP_ACCUM(flen, j);
             }
         } else {
             for (j = fidx0; j < fidx1; ++j) {
-                dat0 = vec_ld(j * 16 + off * 2, (short *) in);
+                dat = vec_ld(j * 16 + off * 2, (short *) in);
                 LOOP_ACCUM(flen, j);
             }
         }
@@ -215,182 +222,113 @@ flenv:
     }
     goto done;
 
-flen1:
-    for (i = 0; i < outlen; ++i) {
-        LOOP_FIRCOEFF;
-
-        /* acc: FIR accumulator, used for accumulating 32-bit values
-           in the format L R L R.  This corresponds to one frame of
-           output, so the pair of values for left and the pair for
-           right have to be summed later.  */
-        acc = vec_splat_s32(0);
-        /* off: offset in input corresponding to first sample in
-           filter */
+fast:
+    i = 0;
+    for (; i < outlen; ++i) {
         off = (int) (x >> 32);
-        /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
-           of whole FIR data we will use */
-        fidx0 = (-off + 7) >> 3;
-        fidx1 = (inlen - off) >> 3;
-        if (fidx0 > 0)
-            goto flen1_slow;
-        if (fidx1 < 1)
-            goto flen1_slow;
+        if (off >= 0)
+            break;
 
-        load_perm = vec_lvsl(off * 2, (short *) in);
-        dat0 = vec_ld(0 + off * 2, (short *) in);
-        dat1 = vec_ld(16 + off * 2, (short *) in);
-
-        dat0 = vec_perm(dat0, dat1, load_perm);
-        LOOP_ACCUM(1, 0);
-
-        goto flen1_accumulate;
-
-    flen1_slow:
         fidx0 = -off;
-        if (fidx0 < 0)
-            fidx0 = 0;
-        fidx1 = inlen - off;
-        if (fidx1 > 8)
-            fidx1 = 8;
+        fidx1 = flen * 8;
 
+        LOOP_FIRCOEFF;
         accs = 0;
         for (j = fidx0; j < fidx1; ++j) {
-            f = (((const short *) fd)[(fn+0) * 8 + j] * ff0 +
-                 ((const short *) fd)[(fn+1) * 8 + j] * ff1)
+            f = (((const short *) fd)[(fn+0) * (flen*8) + j] * ff0 +
+                 ((const short *) fd)[(fn+1) * (flen*8) + j] * ff1)
                 >> INTERP_BITS;
             accs += ((const short *) in)[j + off] * f;
         }
         u.w[0] = accs;
         acc = u.vs[0];
-        goto flen1_accumulate;
 
-    flen1_accumulate:
         LOOP_STORE;
-
         x += inv_ratio;
     }
-    goto done;
 
-flen2:
-    for (i = 0; i < outlen; ++i) {
-        LOOP_FIRCOEFF;
+    switch (flen) {
+    case 1:
+        for (; i < outlen; ++i) {
+            off = (int) (x >> 32);
+            if (off + 8 > inlen)
+                break;
 
-        /* acc: FIR accumulator, used for accumulating 32-bit values
-           in the format L R L R.  This corresponds to one frame of
-           output, so the pair of values for left and the pair for
-           right have to be summed later.  */
-        acc = vec_splat_s32(0);
-        /* off: offset in input corresponding to first sample in
-           filter */
-        off = (int) (x >> 32);
-        /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
-           of whole FIR data we will use */
-        fidx0 = (-off + 7) >> 3;
-        fidx1 = (inlen - off) >> 3;
-        if (fidx0 > 0)
-            goto flen2_slow;
-        if (fidx1 < 2)
-            goto flen2_slow;
-
-        load_perm = vec_lvsl(off * 2, (short *) in);
-        dat0 = vec_ld(0 + off * 2, (short *) in);
-        dat1 = vec_ld(16 + off * 2, (short *) in);
-        dat2 = vec_ld(31 + off * 2, (short *) in);
-
-        dat0 = vec_perm(dat0, dat1, load_perm);
-        LOOP_ACCUM(2, 0);
-
-        dat0 = vec_perm(dat1, dat2, load_perm);
-        LOOP_ACCUM(2, 1);
-
-        goto flen2_accumulate;
-
-    flen2_slow:
-        fidx0 = -off;
-        if (fidx0 < 0)
-            fidx0 = 0;
-        fidx1 = inlen - off;
-        if (fidx1 > 16)
-            fidx1 = 16;
-
-        accs = 0;
-        for (j = fidx0; j < fidx1; ++j) {
-            f = (((const short *) fd)[(fn+0) * 16 + j] * ff0 +
-                 ((const short *) fd)[(fn+1) * 16 + j] * ff1)
-                >> INTERP_BITS;
-            accs += ((const short *) in)[j + off] * f;
+            LOOP_FIRCOEFF;
+            load_perm = vec_lvsl(off * 2, (const short *) in);
+            dat0 = vec_ld(off * 2 +  0, (const short *) in);
+            dat1 = vec_ld(off * 2 + 15, (const short *) in);
+            acc = vec_splat_s32(0);
+            dat = vec_perm(dat0, dat1, load_perm);
+            LOOP_ACCUM(1, 0);
+            LOOP_STORE;
+            x += inv_ratio;
         }
-        u.w[0] = accs;
-        acc = u.vs[0];
-        goto flen2_accumulate;
+        break;
 
-    flen2_accumulate:
-        LOOP_STORE;
+    case 2:
+        for (; i < outlen; ++i) {
+            off = (int) (x >> 32);
+            if (off + 16 > inlen)
+                break;
 
-        x += inv_ratio;
+            LOOP_FIRCOEFF;
+            load_perm = vec_lvsl(off * 2, (const short *) in);
+            dat0 = vec_ld(off * 2 +  0, (const short *) in);
+            dat1 = vec_ld(off * 2 + 16, (const short *) in);
+            dat2 = vec_ld(off * 2 + 31, (const short *) in);
+            acc = vec_splat_s32(0);
+            dat = vec_perm(dat0, dat1, load_perm);
+            LOOP_ACCUM(2, 0);
+            dat = vec_perm(dat1, dat2, load_perm);
+            LOOP_ACCUM(2, 1);
+            LOOP_STORE;
+            x += inv_ratio;
+        }
+        break;
+
+    case 3:
+        for (; i < outlen; ++i) {
+            off = (int) (x >> 32);
+            if (off + 24 > inlen)
+                break;
+
+            LOOP_FIRCOEFF;
+            load_perm = vec_lvsl(off * 2, (const short *) in);
+            dat0 = vec_ld(off * 2 +  0, (const short *) in);
+            dat1 = vec_ld(off * 2 + 16, (const short *) in);
+            dat2 = vec_ld(off * 2 + 32, (const short *) in);
+            dat3 = vec_ld(off * 2 + 47, (const short *) in);
+            acc = vec_splat_s32(0);
+            dat = vec_perm(dat0, dat1, load_perm);
+            LOOP_ACCUM(3, 0);
+            dat = vec_perm(dat1, dat2, load_perm);
+            LOOP_ACCUM(3, 1);
+            dat = vec_perm(dat2, dat3, load_perm);
+            LOOP_ACCUM(3, 2);
+            LOOP_STORE;
+            x += inv_ratio;
+        }
+        break;
     }
-    goto done;
 
-flen3:
-    for (i = 0; i < outlen; ++i) {
-        LOOP_FIRCOEFF;
-
-        /* acc: FIR accumulator, used for accumulating 32-bit values
-           in the format L R L R.  This corresponds to one frame of
-           output, so the pair of values for left and the pair for
-           right have to be summed later.  */
-        acc = vec_splat_s32(0);
-        /* off: offset in input corresponding to first sample in
-           filter */
+    for (; i < outlen; ++i) {
         off = (int) (x >> 32);
-        /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
-           of whole FIR data we will use */
-        fidx0 = (-off + 7) >> 3;
-        fidx1 = (inlen - off) >> 3;
-        if (fidx0 > 0)
-            goto flen3_slow;
-        if (fidx1 < 3)
-            goto flen3_slow;
-
-        load_perm = vec_lvsl(off * 2, (short *) in);
-        dat0 = vec_ld(0 + off * 2, (short *) in);
-        dat1 = vec_ld(16 + off * 2, (short *) in);
-        dat2 = vec_ld(32 + off * 2, (short *) in);
-        dat3 = vec_ld(47 + off * 2, (short *) in);
-
-        dat0 = vec_perm(dat0, dat1, load_perm);
-        LOOP_ACCUM(3, 0);
-
-        dat0 = vec_perm(dat1, dat2, load_perm);
-        LOOP_ACCUM(3, 1);
-
-        dat0 = vec_perm(dat2, dat3, load_perm);
-        LOOP_ACCUM(3, 2);
-
-        goto flen3_accumulate;
-
-    flen3_slow:
-        fidx0 = -off;
-        if (fidx0 < 0)
-            fidx0 = 0;
+        fidx0 = 0;
         fidx1 = inlen - off;
-        if (fidx1 > 24)
-            fidx1 = 24;
 
+        LOOP_FIRCOEFF;
         accs = 0;
         for (j = fidx0; j < fidx1; ++j) {
-            f = (((const short *) fd)[(fn+0) * 24 + j] * ff0 +
-                 ((const short *) fd)[(fn+1) * 24 + j] * ff1)
+            f = (((const short *) fd)[(fn+0) * (flen*8) + j] * ff0 +
+                 ((const short *) fd)[(fn+1) * (flen*8) + j] * ff1)
                 >> INTERP_BITS;
             accs += ((const short *) in)[j + off] * f;
         }
         u.w[0] = accs;
         acc = u.vs[0];
-        goto flen3_accumulate;
 
-    flen3_accumulate:
         LOOP_STORE;
-
         x += inv_ratio;
     }
     goto done;
