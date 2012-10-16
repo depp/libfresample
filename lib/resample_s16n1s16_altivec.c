@@ -139,6 +139,7 @@ lfr_resample_s16n1s16_altivec(
     store_perm = vec_lvsr(0, (short *) out);
 
     switch (flen) {
+    case 1: goto flen1;
     case 2: goto flen2;
     case 3: goto flen3;
     default: goto flenv;
@@ -208,6 +209,62 @@ flenv:
         }
 
     flenv_accumulate:
+        LOOP_STORE;
+
+        x += inv_ratio;
+    }
+    goto done;
+
+flen1:
+    for (i = 0; i < outlen; ++i) {
+        LOOP_FIRCOEFF;
+
+        /* acc: FIR accumulator, used for accumulating 32-bit values
+           in the format L R L R.  This corresponds to one frame of
+           output, so the pair of values for left and the pair for
+           right have to be summed later.  */
+        acc = vec_splat_s32(0);
+        /* off: offset in input corresponding to first sample in
+           filter */
+        off = (int) (x >> 32);
+        /* fixd0, fidx1: start, end indexes of 8-word (16-byte) chunks
+           of whole FIR data we will use */
+        fidx0 = (-off + 7) >> 3;
+        fidx1 = (inlen - off) >> 3;
+        if (fidx0 > 0)
+            goto flen1_slow;
+        if (fidx1 < 1)
+            goto flen1_slow;
+
+        load_perm = vec_lvsl(off * 2, (short *) in);
+        dat0 = vec_ld(0 + off * 2, (short *) in);
+        dat1 = vec_ld(16 + off * 2, (short *) in);
+
+        dat0 = vec_perm(dat0, dat1, load_perm);
+        LOOP_ACCUM(1, 0);
+
+        goto flen1_accumulate;
+
+    flen1_slow:
+        fidx0 = -off;
+        if (fidx0 < 0)
+            fidx0 = 0;
+        fidx1 = inlen - off;
+        if (fidx1 > 8)
+            fidx1 = 8;
+
+        accs = 0;
+        for (j = fidx0; j < fidx1; ++j) {
+            f = (((const short *) fd)[(fn+0) * 8 + j] * ff0 +
+                 ((const short *) fd)[(fn+1) * 8 + j] * ff1)
+                >> INTERP_BITS;
+            accs += ((const short *) in)[j + off] * f;
+        }
+        u.w[0] = accs;
+        acc = u.vs[0];
+        goto flen1_accumulate;
+
+    flen1_accumulate:
         LOOP_STORE;
 
         x += inv_ratio;
