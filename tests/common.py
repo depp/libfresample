@@ -458,7 +458,7 @@ def write_wav(path, rate, data, format):
     except ImportError:
         error('SciPy is required to run this test')
     if format == 's16':
-        scale = 2**15 * math.sqrt(2)
+        scale = 2**15
         data = numpy.asarray(
             numpy.floor(scale * data +
                         numpy.random.random_sample(len(data))),
