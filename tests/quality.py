@@ -71,13 +71,16 @@ def test_snr(param, freq):
         0.5 * numpy.sin(w * numpy.arange(length, dtype='float64')))
     outdata = resample_arr(param, indata)
     window = numpy.kaiser(len(outdata), beta)
-    fft = numpy.fft.rfft(outdata * window)
+    outdata *= window
+    fft = numpy.fft.rfft(outdata)
 
     nbins = NBINS
     fbin = round(freq * len(outdata) / param.RATE_OUT)
-    fft[max(fbin-nbins/2, 0):min(fbin-nbins/2+nbins, len(fft))] = 0
+    bin0 = min(max(fbin-nbins/2, 0), len(fft))
+    bin1 = min(max(fbin-nbins/2 + nbins, 0), len(fft))
+    fft[bin0:bin1] = 0
     noise = numpy.std(fft) / math.sqrt(len(outdata))
-    signal = numpy.std(outdata)
+    signal = numpy.average(window)
 
     return signal / noise
 
@@ -85,12 +88,14 @@ def test_bw(param, target):
     rate = min(param.RATE_IN, param.RATE_OUT)
     f1 = rate * 0.1
     f2 = rate * 0.499
+    base_atten = test_atten(param, f1)
+    rel_target = max(base_atten, 1) * target
     epsilon = BW_EPSILON
     f3 = (f1 + f2) * 0.5
     while f2 - f1 > epsilon:
         f3 = (f1 + f2) * 0.5
         atten = test_atten(param, f3)
-        if atten < target:
+        if atten < rel_target:
             f2 = f3
         else:
             f1 = f3
@@ -106,9 +111,10 @@ def test_snr_bw(param):
         '    Bandwidth: %.2f Hz (%.2f%% of Nyquist frequency)\n' %
         (freq, 100 * 2 * freq / minrate))
 
-    test_freqs = numpy.linspace(freq*0.05, freq*0.95, SNR_NTEST)
+    maxfreq = param.RATE_IN * 0.5
+    test_freqs = numpy.linspace(maxfreq*0.05, maxfreq*0.95, SNR_NTEST)
     test_freqs += numpy.random.uniform(
-        -freq*0.05, freq*0.05, len(test_freqs))
+        -maxfreq*0.04, maxfreq*0.04, len(test_freqs))
 
     test_snr_vec = numpy.vectorize(
         lambda x: test_snr(param, x), otypes=['float32'])
