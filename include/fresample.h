@@ -179,9 +179,31 @@ lfr_swap16(void *dest, const void *src, size_t count);
   Names for filter quality presets.
 */
 enum {
+    /*
+      Low quality: Currently, quality 0..3 are identical, since
+      further reductions in quality do not increase performance.
+    */
     LFR_QUALITY_LOW = 2,
+
+    /*
+      Medium quality: Transition band of 23%, nominal attenuation of
+      60 dB.  Actual attenuation may be higher.
+    */
     LFR_QUALITY_MEDIUM = 5,
+
+    /*
+      High quality: Transition band of 10%, nominal attenuation of 96
+      dB.  It is not normally reasonable to increase quality beyond
+      this level unless you are competing for the prettiest
+      spectrogram.
+    */
     LFR_QUALITY_HIGH = 8,
+
+    /*
+      Ultra quality: Transition band of 3%, nominal attenuation of 120
+      dB.  Filter coefficients may not fit in L2 cache.  Impulse
+      response may be several milliseconds long.
+    */
     LFR_QUALITY_ULTRA = 10
 };
 
@@ -251,7 +273,8 @@ typedef enum {
        fit within the range of audible frequencies.  Default value is
        20 kHz if the input frequency is set, otherwise this parameter
        is unused.  If you want to preserve ultrasonic frequencies,
-       disable this parameter by setting it to -1.  */
+       disable this parameter by setting it to -1.  This is disabled
+       by default at absurd quality settings (9 and 10).  */
     LFR_PARAM_MAXFREQ,
 
     /* A flag which allows aliasing noise as long as it is above

@@ -80,24 +80,24 @@ lfr_param_getf(struct lfr_param *param, lfr_param_t pname, double *value)
 #define MAX_QUALITY 10
 
 struct lfr_quality {
-    unsigned short atten;
-    unsigned short transition;
-    unsigned short loose;
-    unsigned short minfpass;
+    unsigned short atten;      /* dB */
+    unsigned short transition; /* out of 1000 */
+    unsigned short kind;       /* 0 = loose, 2 = maxfreq=0 */
+    unsigned short minfpass;   /* out of 1000 */
 };
 
 static const struct lfr_quality LFR_QUALITY[MAX_QUALITY + 1] = {
-    {  35, 65536* 8/48, 1, 65536* 9/16 },
-    {  35, 65536* 8/48, 1, 65536* 9/16 },
-    {  35, 65536* 8/48, 1, 65536* 9/16 }, /* low */
-    {  35, 65536* 8/48, 1, 65536* 9/16 },
-    {  72, 65536* 8/48, 1, 65536*10/16 },
-    {  78, 65536* 7/48, 0, 65536*11/16 }, /* medium */
-    {  84, 65536* 6/48, 0, 65536*12/16 },
-    {  90, 65536* 5/48, 0, 65536*13/16 },
-    {  96, 65536* 4/48, 0, 65536*14/16 }, /* high */
-    { 108, 65536* 3/48, 0, 65536*15/16 },
-    { 120, 65536* 2/48, 0, 65536*15/16 }  /* ultra */
+    {  35, 350, 0, 500 },
+    {  35, 350, 0, 500 },
+    {  35, 350, 0, 500 }, /* low */
+    {  35, 350, 0, 500 },
+    {  50, 290, 0, 600 },
+    {  60, 230, 1, 700 }, /* medium */
+    {  80, 180, 1, 800 },
+    {  90, 140, 1, 850 },
+    {  96, 100, 1, 900 }, /* high */
+    { 108,  60, 2, 915 },
+    { 120,  30, 2, 930 }  /* ultra */
 };
 
 #define MIN_OUTPUT (1.0 / 128)
@@ -186,7 +186,7 @@ lfr_param_calculate(struct lfr_param *param)
         if (f_transition > 1.0)
             f_transition = 1.0;
     } else {
-        f_transition = (1.0/65536) * (double) LFR_QUALITY[qual].transition;
+        f_transition = (0.5/1000) * (double) LFR_QUALITY[qual].transition;
     }
     GETF(FTRANSITION) = f_transition;
 
@@ -194,8 +194,11 @@ lfr_param_calculate(struct lfr_param *param)
     if (ISSET(MAXFREQ)) {
         f_maxfreq = GETF(MAXFREQ);
     } else {
-        f_maxfreq = 20000.0;
-        GETF(MAXFREQ) = 20000.0;
+        if (LFR_QUALITY[qual].kind < 2)
+            f_maxfreq = 20000.0;
+        else
+            f_maxfreq = -1;
+        GETF(MAXFREQ) = f_maxfreq;
     }
     if (rate > 0)
         f_maxfreq = f_maxfreq / rate;
@@ -206,7 +209,7 @@ lfr_param_calculate(struct lfr_param *param)
     if (ISSET(LOOSE)) {
         loose = GETI(LOOSE) > 0;
     } else {
-        loose = LFR_QUALITY[qual].loose;
+        loose = LFR_QUALITY[qual].kind < 1;
     }
     GETF(LOOSE) = (double) loose;
 
@@ -218,7 +221,7 @@ lfr_param_calculate(struct lfr_param *param)
         else if (f_minpass > MAX_MINPASS)
             f_minpass = MAX_MINPASS;
     } else {
-        f_minpass = (1.0/65536) * LFR_QUALITY[qual].minfpass;
+        f_minpass = 0.001 * LFR_QUALITY[qual].minfpass;
     }
     GETF(MINFPASS) = f_minpass;
 
@@ -259,7 +262,7 @@ lfr_param_calculate(struct lfr_param *param)
         t = 0.5 * f_output * f_minpass;
         if (t > f_pass)
             f_pass = t;
-        if (f_pass > f_maxfreq)
+        if (f_maxfreq > 0 && f_pass > f_maxfreq)
             f_pass = f_maxfreq;
     }
     t = f_stop - MIN_TRANSITION;
