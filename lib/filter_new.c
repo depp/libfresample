@@ -19,6 +19,7 @@ lfr_filter_new(struct lfr_filter **fpp, struct lfr_param *param)
     double t, a, ulp;
     int len, align=8, max_oversample, oversample;
     lfr_ftype_t type;
+    struct lfr_filter *fp;
 
     lfr_param_calculate(param);
 
@@ -130,4 +131,8 @@ lfr_filter_new(struct lfr_filter **fpp, struct lfr_param *param)
     debug("beta: %.3f\n", beta);
 
     lfr_filter_new_window(fpp, type, len, oversample, f_pass, beta);
+    fp = *fpp;
+    fp->f_pass = f_pass;
+    fp->f_stop = f_stop;
+    fp->atten = atten;
 }

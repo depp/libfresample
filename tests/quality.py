@@ -25,6 +25,9 @@ class TestParamSet(ParamSet):
 
     CPU_FEATURES = None
 
+    DUMP_SPECS = param_bool(
+        'DUMP_SPECS', 'dump specs for each setting', False)
+
 NBINS = 10
 SNR_NTEST = 40
 BW_EPSILON = 0.1
@@ -95,6 +98,8 @@ def test_bw(param, target):
 
 def test_snr_bw(param):
     sys.stdout.write(param.str_vars() + '\n')
+    if param.DUMP_SPECS:
+        resample_specs(param)
     freq = test_bw(param, math.sqrt(0.5))
     minrate = min(param.RATE_IN, param.RATE_OUT)
     sys.stdout.write(

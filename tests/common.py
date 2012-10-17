@@ -7,14 +7,15 @@ import atexit
 import os
 import subprocess
 import time
+import decimal
 
 __all__ = [
     'to_dB',
     'temp_files', 'warning', 'error',
     'ParamSet',
     'param', 'param_format', 'param_quality', 'param_rate',
-    'param_range',
-    'sox', 'resample_raw', 'resample_arr',
+    'param_bool', 'param_range',
+    'sox', 'resample_raw', 'resample_specs', 'resample_arr',
     'run_top',
 ]
 
@@ -282,6 +283,19 @@ def param_format(name, doc, default):
 def param_quality(name, doc, default):
     return Param(name, doc, default, int, lambda x: 0 <= x <= 10)
 
+TRUE = frozenset(['1', 'on', 'true', 'yes'])
+FALSE = frozenset(['0', 'off', 'false', 'no'])
+def parse_bool(x):
+    x = x.lower()
+    if x in TRUE:
+        return True
+    if x in FALSE:
+        return False
+    raise ValueError('invalid boolean')
+def param_bool(name, doc, default):
+    return Param(name, doc, default, parse_bool,
+                 lambda x: isinstance(x, bool))
+
 def param_range(name, doc, default, minv, maxv):
     default = list(default)
     if len(default) == 1:
@@ -348,6 +362,59 @@ def resample_raw(params, *args):
     if proc.returncode != 0:
         raise ProcFailure(cmd, proc.returncode)
     return stdout
+
+def fmt_size(size, digits=3):
+    for k in xrange(2):
+        s = decimal.Decimal(size)
+        n = s.adjusted()
+        i = n // 3 + k
+        ii = i * 3
+        s = s.scaleb(-ii)
+        d = min((1 + n - ii) - digits, 0)
+        s2 = s.quantize(decimal.Decimal(1).scaleb(d))
+        if s2.adjusted() > s.adjusted() and d < 0:
+            s2 = s.quantize(decimal.Decimal(1).scaleb(d+1))
+        if s2 < 1000:
+            break
+    if i > 0:
+        try:
+            pfx = 'kMGTPEZY'[i-1]
+        except IndexError:
+            raise ValueError('size too large')
+    else:
+        pfx = ''
+    return '%s %sB' % (s2, pfx)
+
+def fmt_freq(x, nyquist):
+    x = int(x)
+    if x >= 1000:
+        s = '%.1f kHz' % (x / 1000.0)
+    else:
+        s = '%d Hz' % x
+    return s + ' (%.2f%% nyquist)' % (x * 100 / nyquist)
+
+def resample_specs(param):
+    out = resample_raw(param, '--inrate=%d' % param.RATE_IN,
+                       '--dump-specs')
+    data = {}
+    for line in out.splitlines():
+        idx = line.find(':')
+        if not idx:
+            error('invalid dump-specs format')
+        varname = line[:idx].strip()
+        varval = float(line[idx+1:].strip())
+        data[varname] = varval
+    nyquist = 0.5 * min(param.RATE_IN, param.RATE_OUT)
+    rin = param.RATE_IN
+    def pval(x, y):
+        sys.stdout.write('    %s: %s\n' % (x, y))
+    pval('size', int(round(data['size'])))
+    pval('delay', str(data['delay']))
+    pval('memsize', fmt_size(round(data['memsize'])))
+    pval('fpass', fmt_freq(data['fpass'] * rin, nyquist))
+    pval('fstop', fmt_freq(data['fstop'] * rin, nyquist))
+    pval('atten', str(data['atten']) + ' dB')
+
 
 def resample_arr(param, arr):
     with temp_files.group() as temp:

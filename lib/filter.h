@@ -66,6 +66,11 @@ struct lfr_filter {
       non-negative.
     */
     lfr_fixed_t delay;
+
+    /*
+      Design parameters of the filter.
+    */
+    double f_pass, f_stop, atten;
 };
 
 /*

@@ -25,18 +25,22 @@ enum {
     OPT_CPU_FEATURES,
     OPT_VERBOSE,
     OPT_VERSION,
-    OPT_TEST_BUFSIZE
+    OPT_TEST_BUFSIZE,
+    OPT_DUMP_SPECS,
+    OPT_INRATE
 };
 
 static const struct option OPTIONS[] = {
     { "benchmark", required_argument, NULL, OPT_BENCH },
     { "cpu-features", required_argument, NULL, OPT_CPU_FEATURES },
+    { "dump-specs", no_argument, NULL, OPT_DUMP_SPECS },
     { "help", no_argument, NULL, OPT_HELP },
     { "quality", required_argument, NULL, OPT_QUALITY },
     { "rate", required_argument, NULL, OPT_RATE },
     { "test-bufsize", no_argument, NULL, OPT_TEST_BUFSIZE },
     { "verbose", no_argument, NULL, OPT_VERBOSE },
     { "version", no_argument, NULL, OPT_VERSION },
+    { "inrate", required_argument, NULL, OPT_INRATE },
     { NULL, 0, NULL, 0 }
 };
 
@@ -127,6 +131,7 @@ static const char USAGE[] =
     "options:\n"
     "  --benchmark N        benchmark by converting N times, print speed\n"
     "  --cpu-features LIST  allow only CPU features in LIST\n"
+    "  --dump-specs         dump filter specs and quit\n"
     "  -h, --help           show this help screen\n"
     "  -q, --quality Q      set conversion quality 0..10\n"
     "  -r, --rate R         set target sample rate\n"
@@ -152,7 +157,7 @@ test_bufsize(struct lfr_filter *fp, struct audio *ain, struct audio *aout,
     ssize = (int) audio_format_size(aout->fmt) * nchan;
     buf = xmalloc(ssize * 32 + 32);
     ref = xmalloc(ssize * 32 + 32);
-    fsize = lfr_filter_size(fp);
+    lfr_filter_geti(fp, LFR_INFO_SIZE, &fsize);
     minlen = fsize + (int) (inv_ratio >> 26) + 1;
 
     if (ain->nframe < (size_t) minlen) {
@@ -267,11 +272,26 @@ error:
     exit(1);
 }
 
+static void
+dump_filter(struct lfr_filter *fp)
+{
+    int i;
+    const char *name;
+    double v;
+    for (i = 0; ; ++i) {
+        name = lfr_info_name(i);
+        if (!name)
+            break;
+        lfr_filter_getf(fp, i, &v);
+        printf("%s: %f\n", name, v);
+    }
+}
+
 int
 main(int argc, char *argv[])
 {
     long v, benchmark, bi;
-    int rate, opt, nfiles, longindex = 0;
+    int inrate, outrate, opt, nfiles, longindex = 0;
     size_t len;
     struct file_data din;
     struct audio ain, aout;
@@ -284,13 +304,15 @@ main(int argc, char *argv[])
     unsigned dither;
     double time, speed;
     int test_bufsize_flag = 0;
+    int dump_specs = 0;
 
     param = lfr_param_new();
     if (!param)
         error("out of memory");
     benchmark = -1;
     nfiles = 0;
-    rate = -1;
+    inrate = -1;
+    outrate = -1;
     while ((opt = getopt_long(argc, argv, ":hq:r:",
                               OPTIONS, &longindex)) != -1)
     {
@@ -324,8 +346,8 @@ main(int argc, char *argv[])
             break;
 
         case OPT_RATE:
-            rate = audio_rate_parse(optarg);
-            if (rate < 0) {
+            outrate = audio_rate_parse(optarg);
+            if (outrate < 0) {
                 fprintf(stderr, "error: invalid sample rate '%s'\n", argv[1]);
                 return 1;
             }
@@ -341,6 +363,18 @@ main(int argc, char *argv[])
 
         case OPT_TEST_BUFSIZE:
             test_bufsize_flag += 1;
+            break;
+
+        case OPT_DUMP_SPECS:
+            dump_specs = 1;
+            break;
+
+        case OPT_INRATE:
+            inrate = audio_rate_parse(optarg);
+            if (inrate < 0) {
+                fprintf(stderr, "error: invalid sample rate '%s'\n", argv[1]);
+                return 1;
+            }
             break;
 
         case ':':
@@ -361,12 +395,28 @@ main(int argc, char *argv[])
         }
         files[nfiles++] = argv[optind];
     }
-    if (nfiles != 2) {
-        fputs(USAGE, stderr);
+    if (outrate < 0) {
+        fputs("error: no rate specified\n", stderr);
         return 1;
     }
-    if (rate < 0) {
-        fputs("error: no rate specified\n", stderr);
+
+    if (dump_specs) {
+        if (inrate < 0) {
+            fputs("error: no input rate specified, "
+                  "can't dump specs\n", stderr);
+            return 1;
+        }
+        lfr_param_seti(param, LFR_PARAM_INRATE, inrate);
+        lfr_param_seti(param, LFR_PARAM_OUTRATE, outrate);
+        fp = NULL;
+        lfr_filter_new(&fp, param);
+        if (!fp)
+            error("could not create filter");
+        dump_filter(fp);
+        return 0;
+    }
+    if (nfiles != 2) {
+        fputs(USAGE, stderr);
         return 1;
     }
 
@@ -375,8 +425,10 @@ main(int argc, char *argv[])
     audio_init(&ain);
     audio_init(&aout);
     audio_wav_load(&ain, din.data, din.length);
+    if (inrate < 0)
+        inrate = ain.rate;
 
-    audio_rate_format(frate, sizeof(frate), ain.rate);
+    audio_rate_format(frate, sizeof(frate), inrate);
     nchan_format(fnchan, sizeof(fnchan), ain.nchan);
     if (verbose >= 1) {
         fprintf(stderr,
@@ -388,7 +440,7 @@ main(int argc, char *argv[])
         error("unsupported number of channels "
               "(only mono and stereo supported)");
 
-    if (ain.rate == aout.rate) {
+    if (inrate == outrate) {
         if (verbose >= 1) {
             fputs("No rate conversion necessary\n", stderr);
         }
@@ -396,33 +448,27 @@ main(int argc, char *argv[])
     } else {
         audio_convert(&ain, LFR_FMT_S16_NATIVE);
         len = (size_t) floor(
-            (double) ain.nframe * (double) rate / (double) ain.rate + 0.5);
+            (double) ain.nframe * (double) outrate / (double) inrate + 0.5);
 
-        audio_rate_format(frate, sizeof(frate), rate);
+        audio_rate_format(frate, sizeof(frate), outrate);
         if (verbose >= 1) {
             fprintf(stderr,
                     "Output: %s, %s, %s, %zu samples\n",
                     audio_format_name(ain.fmt), frate, fnchan, len);
         }
-        audio_alloc(&aout, len, ain.fmt, ain.nchan, rate);
+        audio_alloc(&aout, len, ain.fmt, ain.nchan, outrate);
 
         inv_ratio =
-            (((lfr_fixed_t) ain.rate << 32) + aout.rate / 2) / aout.rate;
-        lfr_param_seti(param, LFR_PARAM_INRATE, ain.rate);
-        lfr_param_seti(param, LFR_PARAM_OUTRATE, aout.rate);
+            (((lfr_fixed_t) inrate << 32) + outrate / 2) / outrate;
+        lfr_param_seti(param, LFR_PARAM_INRATE, inrate);
+        lfr_param_seti(param, LFR_PARAM_OUTRATE, outrate);
         fp = NULL;
         lfr_filter_new(&fp, param);
         if (!fp)
             error("could not create filter");
 
-        if (verbose >= 1) {
-            fprintf(
-                stderr,
-                "Filter size: %d\n"
-                "Filter memsize: %d\n",
-                lfr_filter_size(fp),
-                lfr_filter_memsize(fp));
-        }
+        if (verbose >= 1)
+            dump_filter(fp);
 
         pos0 = -lfr_filter_delay(fp);
 
@@ -450,7 +496,7 @@ main(int argc, char *argv[])
             time = t1 - t0;
             speed = 
                 ((double) CLOCKS_PER_SEC * benchmark * ain.nframe) /
-                (time * ain.rate);
+                (time * inrate);
             if (verbose >= 1) {
                 fprintf(
                     stderr,

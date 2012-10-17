@@ -361,6 +361,67 @@ lfr_param_getf(struct lfr_param *param, lfr_param_t pname, double *value);
    ======================================== */
 
 /*
+  Information queries that a filter responds to.  Each query gives an
+  integer or floating point result, automatically cast to the type
+  requested.
+*/
+enum {
+    /*
+      The size of the filter, also known as the filter's order.  This
+      does not include oversampling.  The resampler will read this
+      many samples, starting with the current position (rounded down),
+      whenever it calculates a sample.
+
+      In other words, this is the amount of overlap needed when
+      resampling consecutive buffers.
+    */
+    LFR_INFO_SIZE,
+
+    /*
+      Filter delay.  Note that lfr_filter_delay returns a fixed point
+      number and is usually preferable.
+    */
+    LFR_INFO_DELAY,
+
+    /*
+      The is the number of bytes used by filter coefficients.
+    */
+    LFR_INFO_MEMSIZE,
+
+    /*
+      The normalized pass frequency the filter was designed with.
+    */
+    LFR_INFO_FPASS,
+
+    /*
+      The normalized stop frequency the filter was designed with.
+    */
+    LFR_INFO_FSTOP,
+
+    /*
+      The stopband attenuation, in dB, that the filter was designed
+      with.
+    */
+    LFR_INFO_ATTEN
+};
+
+#define LFR_INFO_COUNT (LFR_INFO_ATTEN + 1)
+
+/*
+  Get the name of a filter info query, or return NULL if the info query
+  does not exist.
+*/
+LFR_PUBLIC const char *
+lfr_info_name(int pname);
+
+/*
+  Get the index of a filter info query by name, or return -1 if the
+  info query does not exist.
+*/
+LFR_PUBLIC int
+lfr_info_lookup(const char *pname, size_t len);
+
+/*
   A 32.32 fixed point number.  This is used for expressing fractional
   positions in a buffer.
 
@@ -389,29 +450,26 @@ LFR_PUBLIC void
 lfr_filter_free(struct lfr_filter *fp);
 
 /*
-  Get the size of a filter.  This is the (not oversampled) FIR filter
-  order, and the resampler will read this many samples beyond a given
-  position to compute the resampled value.  In other words, this is
-  the number of samples of overlap needed when resampling consecutive
-  buffers.
-*/
-LFR_PUBLIC int
-lfr_filter_size(const struct lfr_filter *fp);
-
-/*
-  Get the memory size of a filter.  This is the number of bytes used
-  by filter coefficients.
-*/
-LFR_PUBLIC int
-lfr_filter_memsize(const struct lfr_filter *fp);
-
-/*
   Get the delay of a filter, in fixed point.  Filters are causal, so
   you can subtract the filter delay from the position to create a
   non-causal filter with zero delay.
 */
 LFR_PUBLIC lfr_fixed_t
 lfr_filter_delay(const struct lfr_filter *fp);
+
+/*
+  Query the filter and return an integer value.  This will cast if
+  necessary.
+*/
+LFR_PUBLIC void
+lfr_filter_geti(const struct lfr_filter *fp, int iname, int *value);
+
+/*
+  Query the filter and return a floating-point value.  This will cast
+  if necessary.
+*/
+LFR_PUBLIC void
+lfr_filter_getf(const struct lfr_filter *fp, int iname, double *value);
 
 /*
   Resample an audio buffer.  Note that this function may need to
