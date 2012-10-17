@@ -15,6 +15,9 @@ except ImportError:
     sys.stderr.write('error: SciPy is required to run this test.\n')
     sys.exit(0)
 
+def to_dB(x):
+    return 20 * math.log10(x)
+
 class ProcFailure(Exception):
     def __init__(self, cmd, returncode):
         self.cmd = cmd
@@ -236,11 +239,9 @@ def write_wav(path, rate, data, format):
         data = numpy.asarray(data, dtype='float32')
     else:
         raise ValueError('unknown format')
-    # with open(path, 'wb') as fp:
     scipy.io.wavfile.write(path, rate, data)
 
 def read_wav(path):
-    #with open(path, 'rb') as fp:
     rate, data = scipy.io.wavfile.read(path)
     n = data.dtype.name
     if n == 'int16':
@@ -269,12 +270,14 @@ class Resampler(object):
                 raise ProcFailure(cmd)
             return read_wav(outpath)
 
-class BandwidthTest(object):
-    """Test the bandwidth of a resampler."""
+class BandwidthSNRTest(object):
+    """Test the bandwidth and SNR of a resampler."""
     def __init__(self, params):
         self.resampler = Resampler(params)
         self.beta = params.TEST_BETA
         self.length = params.TEST_LENGTH
+        self.nbins = 10
+        self.snr_ntest = 40
 
     def test_atten(self, freq):
         """Test the attenuation of the resampler at the given frequency.
@@ -298,6 +301,29 @@ class BandwidthTest(object):
         outdata = self.resampler.resample(indata)
         return numpy.std(outdata) / numpy.std(indata)
 
+    def test_snr(self, freq):
+        """Test the SNR using a test tone at the given frequency.
+
+        This works by computing the FFT of the result, zeroing the FFT
+        corresponding to the test tone, and comparing the signal power
+        with the signal power of the output signal.  Returns the SNR
+        ratio (as a ratio, not dB).
+        """
+        w = 2 * math.pi * freq / self.resampler.rate1
+        indata = (
+            0.5 * numpy.sin(w * numpy.arange(self.length, dtype='float64')))
+        outdata = self.resampler.resample(indata)
+        window = numpy.kaiser(len(outdata), self.beta)
+        fft = numpy.fft.rfft(outdata * window)
+
+        nbins = self.nbins
+        fbin = round(freq * len(outdata) / self.resampler.rate2)
+        fft[max(fbin-nbins/2, 0):min(fbin-nbins/2+nbins, len(fft))] = 0
+        noise = numpy.std(fft) / math.sqrt(len(outdata))
+        signal = numpy.std(outdata)
+
+        return signal / noise
+
     def test_bw(self, target):
         rate = min(self.resampler.rate1, self.resampler.rate2)
         f1 = rate * 0.1
@@ -315,7 +341,22 @@ class BandwidthTest(object):
 
     def run(self):
         freq = self.test_bw(math.sqrt(0.5))
-        sys.stdout.write('Bandwidth: %.2f Hz\n' % freq)
+        minrate = min(self.resampler.rate1, self.resampler.rate2)
+        sys.stdout.write(
+            'Bandwidth: %.2f Hz (%.2f%% of Nyquist frequency)\n' %
+            (freq, 100 * 2 * freq / minrate))
+
+        test_freqs = numpy.linspace(freq*0.05, freq*0.95, self.snr_ntest)
+        test_freqs += numpy.random.uniform(
+            -freq*0.05, freq*0.05, len(test_freqs))
+
+        test_snr = numpy.vectorize(self.test_snr, otypes=['float32'])
+        snrs = test_snr(test_freqs)
+        snr_avg = numpy.average(snrs)
+        snr_min = numpy.amin(snrs)
+        sys.stdout.write(
+            'Worst-case SNR: %.2f dB (avg %.2f dB)\n' %
+            (to_dB(snr_min), to_dB(snr_avg)))
 
 NOESCAPE = re.compile('^[-A-Za-z0-9_./=:,+=]+$')
 def mkparam(x):
@@ -327,9 +368,10 @@ def run():
     try:
         param = TestParamSet.from_args()
 
-        t = BandwidthTest(param)
+        tests = [BandwidthSNRTest(param)]
         param.warn_unread()
-        t.run()
+        for t in tests:
+            t.run()
     except ProcFailure:
         exc_type, exc_value, traceback
         sys.stderr.write('error: command failed with code %d\n' %
