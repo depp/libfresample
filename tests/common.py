@@ -1,3 +1,5 @@
+from __future__ import with_statement
+
 import tempfile
 import math
 import sys
