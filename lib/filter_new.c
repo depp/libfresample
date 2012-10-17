@@ -5,7 +5,7 @@
 
 #if 0
 #include <stdio.h>
-#define debug(...) printf(__VA_ARGS__)
+#define debug(...) fprintf(stderr, __VA_ARGS__)
 #else
 #define debug(...) (void) 0
 #endif
@@ -13,8 +13,8 @@
 void
 lfr_filter_new(struct lfr_filter **fpp, struct lfr_param *param)
 {
-    double f_pass, f_stop, atten;
-    double dw, lenf, atten2, atten3, maxerror, beta;
+    double f_pass, f_stop, atten, f_pass2;
+    double dw, dw2, lenf, atten2, atten3, maxerror, beta;
     double ierror, rerror, error;
     double t, a, ulp;
     int len, align=8, max_oversample, oversample;
@@ -110,17 +110,31 @@ lfr_filter_new(struct lfr_filter **fpp, struct lfr_param *param)
        ======================================== */
 
     /* Since we rounded up the filter order, we can increase the stop
-       band attenuation without making the transition bandwidth exceed
-       the design parameters.  This gives a "free" boost in quality.
-       However, we don't increase attenuation so it gets swamped by
-       roundoff error.  */
+       band attenuation or bandwidth without making the transition
+       bandwidth exceed the design parameters.  This gives a "free"
+       boost in quality.  We choose to increase both.
 
+       If we didn't increase these parameters, we would still incur
+       the additional computational cost but it would be spent
+       increasing the width of the stop band, which is not useful.  */
+
+    /* atten3 is the free stopband attenuation */
     atten3 = (len - 1) * 4.57 * dw + 8;
-    t = (-20.0 / log(10.0)) * log(atten3);
+    t = (-20.0 / log(10.0)) * log(rerror * ulp);
+    debug("t: %.3f\n", t);
     if (t < atten3)
         atten3 = t;
+    debug("atten3: %.3f\n", atten3);
     if (atten2 > atten3)
         atten3 = atten2;
+    else
+        atten3 = 0.5 * (atten2 + atten3);
+    debug("atten3: %.3f (final)\n", atten3);
+
+    /* f_pass2 is the free pass band */
+    dw2 = (atten3 - 8.0) / (4.57 * (len - 1));
+    f_pass2 = f_stop - dw2 * (1.0 / (8.0 * atan(1.0)));
+    debug("f_pass: %.3f -> %.3f\n", f_pass, f_pass2);
 
     if (atten3 > 50)
         beta = 0.1102 * (atten3 - 8.7);
@@ -130,7 +144,7 @@ lfr_filter_new(struct lfr_filter **fpp, struct lfr_param *param)
         beta = 0;
     debug("beta: %.3f\n", beta);
 
-    lfr_filter_new_window(fpp, type, len, oversample, f_pass, beta);
+    lfr_filter_new_window(fpp, type, len, oversample, f_pass2, beta);
     fp = *fpp;
     fp->f_pass = f_pass;
     fp->f_stop = f_stop;
