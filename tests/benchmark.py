@@ -22,6 +22,9 @@ class TestParamSet(ParamSet):
         'CPU_FEATURES', 'allowed CPU features', None,
         lambda x: x, lambda x: True)
 
+    DUMP_SPECS = param_bool(
+        'DUMP_SPECS', 'dump specs for each setting', False)
+
 FORMATS = { 's16': '16', 'f32': '32' }
 
 class InputGenerator(object):
@@ -46,13 +49,21 @@ class InputGenerator(object):
         return path
 
 def benchmark(inputgen, param):
-    sys.stdout.write(param.str_vars())
-    sys.stdout.flush()
+    def benchmark():
+        out = resample_raw(param, '--benchmark=' + str(param.ITERCOUNT),
+                           infile, '/dev/null')
+        return out.strip()
     infile = inputgen.gen_input(param)
-    out = resample_raw(param, '--benchmark=' + str(param.ITERCOUNT),
-                       infile, '/dev/null')
-    out = out.strip()
-    sys.stdout.write('; speed: %s\n' % out)
+    if param.DUMP_SPECS:
+        sys.stdout.write(param.str_vars() + '\n')
+        resample_specs(param)
+        out = benchmark()
+        sys.stdout.write('    speed: %s\n' % out)
+    else:
+        sys.stdout.write(param.str_vars())
+        sys.stdout.flush()
+        out = benchmark()
+        sys.stdout.write('; speed: %s\n' % out)
 
 def run(param):
     inputgen = InputGenerator(param)
