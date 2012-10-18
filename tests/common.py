@@ -412,7 +412,7 @@ def resample_specs(param):
         sys.stdout.write('    %s: %s\n' % (x, y))
     pval('size', int(round(data['size'])))
     pval('delay', str(data['delay']))
-    pval('memsize', fmt_size(round(data['memsize'])))
+    pval('memsize', fmt_size(int(round(data['memsize']))))
     pval('fpass', fmt_freq(data['fpass'] * rin, nyquist))
     pval('fstop', fmt_freq(data['fstop'] * rin, nyquist))
     pval('atten', str(data['atten']) + ' dB')
