@@ -72,8 +72,10 @@ clean-local:
 EXTRA_DIST = \
 	autogen.sh \
 	LibFResample.xcodeproj/project.pbxproj \
+	LibFResample_Xcode3.xcodeproj/project.pbxproj \
 	LICENSE.txt \
 	README.txt \
+	fresample-Info.plist \
 	tests/benchmark.py \
 	tests/common.py \
 	tests/dumpspecs.py \
