@@ -1,22 +1,32 @@
 # Build directory and products
 /build
 *.o
+*.lo
 *.a
+*.la
+.libs
 /fresample
 
 # Autotools
 /aclocal.m4
 /autom4te.cache
+/config.guess
 /config.h
 /config.h.in
 /config.log
 /config.mak
 /config.mak.in
 /config.status
+/config.sub
 /configure
 /depcomp
 /install-sh
+/libtool
+/ltmain.sh
+/m4/*
+!/m4/.keep
 /missing
+/stamp-h1
 Makefile
 Makefile.in
 .deps

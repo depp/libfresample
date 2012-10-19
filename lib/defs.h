@@ -53,7 +53,7 @@
    Utility functions
    ==================== */
 
-#if defined(LFR_SSE2)
+#if defined(LFR_SSE2) && defined(LFR_CPU_X86)
 #include <emmintrin.h>
 
 /*
@@ -95,7 +95,7 @@ lfr_rand_epu32(__m128i x, __m128i a, __m128i c)
 
 #endif
 
-#if defined(LFR_ALTIVEC)
+#if defined(LFR_ALTIVEC) && defined(LFR_CPU_PPC)
 #if !defined(__APPLE_ALTIVEC__)
 #include <altivec.h>
 #endif

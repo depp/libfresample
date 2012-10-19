@@ -1,41 +1,58 @@
 AUTOMAKE_OPTIONS = 1.5 foreign subdir-objects
+ACLOCAL_AMFLAGS = -I m4
 
-lib_LIBRARIES = libfresample.a
-bin_PROGRAMS = fresample
+lib_LTLIBRARIES = libfresample.la
+noinst_PROGRAMS = fresample
 
-AM_CPPFLAGS = -Iinclude
+AM_CPPFLAGS = -I@srcdir@/include
 AM_CFLAGS = @CWARN@
 
-libfresample_a_SOURCES = \
-	lib/calculate.h \
-	lib/calculate.c \
-	lib/cpu.h \
+libfresample_la_SOURCES = \
+	lib/convert.h \
 	lib/cpu.c \
-	lib/s16.h \
-	lib/s16_free.c \
-	lib/s16_new_lowpass.c \
-	lib/s16_new_preset.c \
-	lib/s16_new_resample.c \
-	lib/s16_new_sinc.c \
-	lib/s16_resample_mono.c \
-	lib/s16_resample_mono_scalar.c \
-	lib/s16_resample_mono_sse2.c \
-	lib/s16_resample_stereo.c \
-	lib/s16_resample_stereo_scalar.c \
-	lib/s16_resample_stereo_sse2.c
+	lib/cpu.h \
+	lib/defs.h \
+	lib/filter_delay.c \
+	lib/filter_free.c \
+	lib/filter_get.c \
+	lib/filter.h \
+	lib/filter_new.c \
+	lib/filter_new_window.c \
+	lib/info_name.c \
+	lib/param.c \
+	lib/param.h \
+	lib/param_name.c \
+	lib/resample.c \
+	lib/resample.h \
+	lib/resample_s16func.c \
+	lib/resample_s16n1f32_altivec.c \
+	lib/resample_s16n1f32_scalar.c \
+	lib/resample_s16n1f32_sse2.c \
+	lib/resample_s16n1s16_altivec.c \
+	lib/resample_s16n1s16_scalar.c \
+	lib/resample_s16n1s16_sse2.c \
+	lib/resample_s16n2f32_altivec.c \
+	lib/resample_s16n2f32_scalar.c \
+	lib/resample_s16n2f32_sse2.c \
+	lib/resample_s16n2s16_altivec.c \
+	lib/resample_s16n2s16_scalar.c \
+	lib/resample_s16n2s16_sse2.c \
+	lib/swap16.c \
+	lib/swap16_scalar.c
 
 include_HEADERS = \
 	include/fresample.h
 
 fresample_SOURCES = \
 	src/audio.c \
-	src/audio.h \
 	src/audio_format.c \
+	src/audio.h \
 	src/audio_rate.c \
 	src/audio_raw_load.c \
 	src/audio_wav_check.c \
 	src/audio_wav_load.c \
 	src/audio_wav_save.c \
+	src/binary.h \
 	src/common.c \
 	src/common.h \
 	src/file.c \
@@ -44,4 +61,4 @@ fresample_SOURCES = \
 	src/riff.c \
 	src/riff.h
 
-fresample_LDADD = libfresample.a
+fresample_LDADD = libfresample.la
