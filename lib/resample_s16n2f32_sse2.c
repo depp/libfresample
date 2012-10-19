@@ -64,7 +64,6 @@ lfr_resample_s16n2f32_sse2(
     lcg_a = _mm_set1_epi32(LCG_A4);
     lcg_c = _mm_set1_epi32(LCG_C4);
 
-    zv = _mm_set1_epi32(0);
     for (i = 0; i < outlen; ++i) {
         /* fn: filter number
            ff0: filter factor for filter fn

@@ -274,7 +274,6 @@ final:
     *dither = ds;
 
     /* Store remaing bytes */
-    acc = _mm_set1_epi32(0);
     if ((outlen & 7) != 0) {
         LOOP_COMBINE;
         u.x = acc;

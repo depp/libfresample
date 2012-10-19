@@ -9,10 +9,16 @@
 #define ATTR_ARTIFICIAL
 #define INLINE_SPEC
 
-#if defined(__CLANG__)
+#define LFR_UNREACHABLE (void) 0
+
+#if defined(__clang__)
 # if __has_attribute(artificial)
 #  undef ATTR_ARTIFICIAL
 #  define ATTR_ARTIFICIAL __attribute__((artificial))
+# endif
+# if __has_builtin(__builtin_unreachable)
+#  undef LFR_UNREACHABLE
+#  define LFR_UNREACHABLE __builtin_unreachable()
 # endif
 # undef INLINE_SPEC
 # define INLINE_SPEC __inline
@@ -20,6 +26,10 @@
 # if (__GNUC__ >= 4 && __GNUC_MINOR__ >= 3) || __GNUC__ > 4
 #  undef ATTR_ARTIFICIAL
 #  define ATTR_ARTIFICIAL __attribute__((artificial))
+# endif
+# if (__GNUC__ >= 4 && __GNU_MINOR__ >= 5) || __GNUC__ > 4
+#  undef LFR_UNREACHABLE
+#  define LFR_UNREACHABLE __builtin_unreachable()
 # endif
 # undef INLINE_SPEC
 # define INLINE_SPEC __inline

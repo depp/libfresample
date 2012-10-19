@@ -11,7 +11,7 @@
 #define ATTR_ARTIFICIAL
 #define INLINE_SPEC
 
-#if defined(__CLANG__)
+#if defined(__clang__)
 # if __has_attribute(noreturn)
 #  undef ATTR_NORETURN
 #  define ATTR_NORETURN __attribute__((noreturn))

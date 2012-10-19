@@ -17,8 +17,10 @@ lfr_filter_get(const struct lfr_filter *fp, int iname,
     case LFR_INFO_DELAY:
         if (vi)
             *vi = (int) (fp->delay >> 32);
-        else
+        else if (vd)
             *vd = (double) (fp->delay) * (1.0 / 4294967296.0);
+        else
+            LFR_UNREACHABLE;
         return;
 
     case LFR_INFO_MEMSIZE:
@@ -51,15 +53,19 @@ lfr_filter_get(const struct lfr_filter *fp, int iname,
 ivalue:
     if (vi)
         *vi = ivalue;
-    else
+    else if (vd)
         *vd = (double) ivalue;
+    else
+        LFR_UNREACHABLE;
     return;
 
 dvalue:
-    if (vd)
+    if (vi)
+        *vi = (int) dvalue;
+    else if (vd)
         *vd = dvalue;
     else
-        *vi = (int) dvalue;
+        LFR_UNREACHABLE;
     return;
 }
 

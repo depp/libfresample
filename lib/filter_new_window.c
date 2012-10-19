@@ -85,6 +85,8 @@ lfr_filter_calculate_s16(short *data, int nsamp, int nfilt,
             data[i * nsamp + j] = (short) z;
         }
     }
+
+    free(a);
 }
 
 static void
