@@ -64,7 +64,7 @@ class TempFiles(object):
     def unique(self):
         c = self._counter
         self._counter = c + 1
-        return 'tmp%06x' % c
+        return os.path.join(self.getdir(), 'tmp%06x' % c)
 
     def group(self):
         return TempGroup(self.unique())
@@ -392,10 +392,10 @@ def resample_raw(params, *args):
     stdout, stderr = proc.communicate()
     if proc.returncode != 0:
         proc_failed(proc, cmd)
-    return stdout
+    return stdout.decode('ascii')
 
 def fmt_size(size, digits=3):
-    for k in xrange(2):
+    for k in range(2):
         s = decimal.Decimal(size)
         n = s.adjusted()
         i = n // 3 + k
