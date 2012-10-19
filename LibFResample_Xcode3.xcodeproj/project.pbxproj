@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 46;
+	objectVersion = 42;
 	objects = {
 
 /* Begin PBXAggregateTarget section */
@@ -355,16 +355,9 @@
 /* Begin PBXProject section */
 		38F8DBE31612350A00DD1BDA /* Project object */ = {
 			isa = PBXProject;
-			attributes = {
-				LastUpgradeCheck = 0450;
-			};
 			buildConfigurationList = 38F8DBE61612350A00DD1BDA /* Build configuration list for PBXProject "LibFResample" */;
-			compatibilityVersion = "Xcode 3.2";
-			developmentRegion = English;
+			compatibilityVersion = "Xcode 2.4";
 			hasScannedForEncodings = 0;
-			knownRegions = (
-				en,
-			);
 			mainGroup = 38F8DBE11612350A00DD1BDA;
 			productRefGroup = 38F8DC231612357900DD1BDA /* Products */;
 			projectDirPath = "";
@@ -503,7 +496,6 @@
 		38455CA6163172A40064B183 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				COMBINE_HIDPI_IMAGES = YES;
 				PRODUCT_NAME = "Test Script";
 			};
 			name = Debug;
@@ -511,7 +503,6 @@
 		38455CA7163172A40064B183 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				COMBINE_HIDPI_IMAGES = YES;
 				PRODUCT_NAME = "Test Script";
 			};
 			name = Release;
@@ -519,12 +510,12 @@
 		38455CCE163178530064B183 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				FRAMEWORK_VERSION = A;
 				INFOPLIST_FILE = "fresample-Info.plist";
+				INSTALL_PATH = "$(HOME)/Library/Frameworks";
 				PRODUCT_NAME = fresample;
 			};
 			name = Debug;
@@ -532,13 +523,13 @@
 		38455CCF163178530064B183 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				FRAMEWORK_VERSION = A;
 				INFOPLIST_FILE = "fresample-Info.plist";
+				INSTALL_PATH = "$(HOME)/Library/Frameworks";
 				PRODUCT_NAME = fresample;
 			};
 			name = Release;
@@ -556,7 +547,11 @@
 		38F8DBE51612350A00DD1BDA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "$(ARCHS_STANDARD_32_64_BIT)";
+				ARCHS = (
+					i386,
+					x86_64,
+					ppc,
+				);
 				COPY_PHASE_STRIP = YES;
 				GCC_OPTIMIZATION_LEVEL = s;
 				HEADER_SEARCH_PATHS = include;
@@ -567,7 +562,6 @@
 		38F8DC2E1612358D00DD1BDA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				COMBINE_HIDPI_IMAGES = YES;
 				INSTALL_PATH = /usr/local/lib;
 				PRODUCT_NAME = fresample;
 			};
@@ -576,7 +570,6 @@
 		38F8DC2F1612358D00DD1BDA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				COMBINE_HIDPI_IMAGES = YES;
 				INSTALL_PATH = /usr/local/lib;
 				PRODUCT_NAME = fresample;
 			};
