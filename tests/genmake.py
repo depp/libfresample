@@ -16,6 +16,10 @@ parser.add_option(
     '--autoconf', dest='autoconf',
     action='store_true', default=False,
     help='generate Makefile.in for autoconf')
+parser.add_option(
+    '--xcode', dest='xcode',
+    action='store_true', default=False,
+    help='generate Makefile for Xcode')
 
 options, args = parser.parse_args()
 if args:
@@ -44,10 +48,11 @@ class Makefile(object):
             self._fp.write(line + '\n')
     def save(self):
         if options.autoconf:
-            path = 'Makefile.in'
-        else:
+            path = os.path.join(sys.path[0], 'Makefile.in')
+        elif options.xcode:
             path = 'Makefile'
-        path = os.path.join(sys.path[0], path)
+        else:
+            path = os.path.join(sys.path[0], 'Makefile')
         f = open(path, 'w')
         self._write_dep('.PHONY', sorted(self._phony))
         f.write('check:\n')
@@ -59,6 +64,8 @@ class Makefile(object):
 make = Makefile()
 if options.autoconf:
     make.write('FR := @top_builddir@/fresample')
+elif options.xcode:
+    make.write('FR := ../fresample')
 else:
     make.build('Makefile', ['genmake.py'], 'python genmake.py')
     make.write('FR := ../build/product/fresample')
