@@ -3,7 +3,8 @@ AC_INIT([libfresample], [0.1], [depp@zdome.net])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_SRCDIR([lib/resample.c])
 AC_CONFIG_HEADERS([config.h])
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile tests/Makefile])
+AC_CONFIG_FILES([tests/test.sh], [chmod +x tests/test.sh])
 
 LT_INIT
 AM_INIT_AUTOMAKE

@@ -3,15 +3,29 @@ try:
     from cStringIO import StringIO
 except ImportError:
     from io import StringIO
+import optparse
+import sys
+import os
+
+def error(x):
+    sys.stderr.write('error: %s\n' % x)
+    sys.exit(1)
+
+parser = optparse.OptionParser()
+parser.add_option(
+    '--autoconf', dest='autoconf',
+    action='store_true', default=False,
+    help='generate Makefile.in for autoconf')
+
+options, args = parser.parse_args()
+if args:
+    error('invalid options')
 
 class Makefile(object):
     def __init__(self):
         self._fp = StringIO()
-        self._all = set()
         self._targets = set()
         self._phony = set()
-    def add_default(self, x):
-        self._all.add(x)
     def _write_dep(self, target, deps):
         fp = self._fp
         fp.write(target + ':')
@@ -29,20 +43,26 @@ class Makefile(object):
         for line in line:
             self._fp.write(line + '\n')
     def save(self):
-        f = open('Makefile', 'w')
-        self._write_dep('all', sorted(self._all))
+        if options.autoconf:
+            path = 'Makefile.in'
+        else:
+            path = 'Makefile'
+        path = os.path.join(sys.path[0], path)
+        f = open(path, 'w')
         self._write_dep('.PHONY', sorted(self._phony))
-        f.write('all:\n')
+        f.write('check:\n')
         f.write(self._fp.getvalue())
     def phony(self, target, deps):
         self._phony.add(target)
         self._write_dep(target, deps)
 
 make = Makefile()
-make.build('Makefile', ['genmake.py'], 'python genmake.py')
-make.write(
-    'FR := ../build/product/fresample',
-    'SOX := sox')
+if options.autoconf:
+    make.write('FR := @top_builddir@/fresample')
+else:
+    make.build('Makefile', ['genmake.py'], 'python genmake.py')
+    make.write('FR := ../build/product/fresample')
+make.write('SOX := sox')
 
 def test_sweep(depth, nchan, rate1, rate2):
     name = 'sweep_r%ds%dn%d' % (rate1 // 1000, depth, nchan)
@@ -101,10 +121,9 @@ def test_correct(depth, nchan, rate1, rate2):
            for q in range(11) for f in ['none', 'all']] +
           ['cmp %s %s' % x for x in outputs] +
           ['@echo === OUTPUT MATCHES ===']))
-    name2 = 'test-' + { 1: 'mono', 2: 'stereo' }.get(nchan, 'n%d' % nchan)
+    name2 = 'check-' + { 1: 'mono', 2: 'stereo' }.get(nchan, 'n%d' % nchan)
     make.phony(name2, [name])
-    make.phony('test', [name2])
-    make.add_default('test')
+    make.phony('check', [name2])
 
 test_correct(16, 1, 48000, 44100)            
 test_correct(16, 2, 48000, 44100)            

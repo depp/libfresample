@@ -1,4 +1,4 @@
 *.wav
 *.png
-benchmark.txt
 *.pyc
+/test.sh

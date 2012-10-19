@@ -24,11 +24,6 @@ __all__ = [
 def to_dB(x):
     return 20 * math.log10(x)
 
-class ProcFailure(Exception):
-    def __init__(self, cmd, returncode):
-        self.cmd = cmd
-        self.returncode = returncode
-
 class TempGroup(object):
     def __init__(self, prefix):
         self._files = set()
@@ -88,7 +83,7 @@ def warning(why, info=None):
     pexc(info)
 
 def error(why, info=None):
-    sys.stderr.write('error: ' + why + '\n')
+    sys.stderr.write('\n\n' 'error: ' + why + '\n')
     pexc(info)
     sys.exit(1)
 
@@ -122,8 +117,16 @@ class Param(object):
                 'value for %s is out of range: %r' % (self.name, value))
         instance._dict[self.name] = value
 
+def param_prog(name, doc, default):
+    return Param(name, doc, default, lambda x: x, lambda x: True)
+
 PARAM = re.compile('^[A-Za-z_][A-Za-z0-9_]*$')
 class ParamSet(object):
+    FR = param_prog('FR', 'path to fresample program',
+                    os.path.join(sys.path[0], '../fresample'))
+
+    SOX = param_prog('SOX', 'path to SoX program', 'sox')
+
     @classmethod
     def from_args(klass, args=None):
         if args is None:
@@ -342,27 +345,53 @@ def param_range(name, doc, default, minv, maxv):
             return minv <= x <= maxv
     return Param(name, doc, default, parse, valid)
 
+def proc_failed(proc, cmd):
+    sys.stderr.write(
+        '\n\n'
+        'error: command failed with code %d\n'
+        'command: %s\n' %
+        (proc.returncode, ' '.join([mkparam(x) for x in cmd])))
+    sys.exit(1)
+
 def sox(param, args):
-    cmd = ['sox']
+    cmd = [param.SOX]
     cmd.extend(args)
-    proc = subprocess.Popen(cmd)
+    try:
+        proc = subprocess.Popen(cmd)
+    except OSError:
+        exc_type, exc_val, traceback = sys.exc_info()
+        sys.stderr.write(
+            '\n\n'
+            'could not run SoX: %s: %s\n'
+            'Is SoX installed?\n' %
+            (exc_type.__name__, str(exc_val)))
+        sys.exit(1)
     proc.wait()
     if proc.returncode != 0:
-        raise ProcFailure(cmd, proc.returncode)
+        proc_failed(proc, cmd)
 
 def resample_raw(params, *args):
     cmd = [
-        '../build/product/fresample',
+        params.FR,
         '-q', str(params.QUALITY),
         '-r', str(params.RATE_OUT)]
     features = params.CPU_FEATURES
     if features is not None:
         cmd.append('--cpu-features=' + features)
     cmd.extend(args)
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    except OSError:
+        exc_type, exc_val, traceback = sys.exc_info()    
+        sys.stderr.write(
+            '\n\n'
+            'error: could not run fresample (%s): %s: %s\n'
+            'Did you remember to run "make"?\n' %
+            (params.FR, exc_type.__name__, str(exc_val)))
+        sys.exit(1)
     stdout, stderr = proc.communicate()
     if proc.returncode != 0:
-        raise ProcFailure(cmd, proc.returncode)
+        proc_failed(proc, cmd)
     return stdout
 
 def fmt_size(size, digits=3):
@@ -437,12 +466,6 @@ def run_top(pclass, func):
     try:
         param = pclass.from_args()
         func(param)
-    except ProcFailure:
-        exc_type, exc_value, traceback = sys.exc_info()
-        sys.stderr.write('error: command failed with code %d\n' %
-                         exc_value.returncode)
-        sys.stderr.write('  command: %s\n' %
-                         ' '.join([mkparam(x) for x in exc_value.cmd]))
     finally:
         t2 = time.time()
         sys.stderr.write('Elapsed time: %f s\n' % (t2 - t1))

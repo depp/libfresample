@@ -62,3 +62,6 @@ fresample_SOURCES = \
 	src/riff.h
 
 fresample_LDADD = libfresample.la
+
+check: fresample
+	cd tests && $(MAKE) check
