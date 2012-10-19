@@ -6,7 +6,7 @@ AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([Makefile tests/Makefile])
 AC_CONFIG_FILES([tests/test.sh], [chmod +x tests/test.sh])
 
-LT_INIT
+AC_PROG_LIBTOOL
 AM_INIT_AUTOMAKE
 
 AC_PROG_CC
@@ -56,7 +56,9 @@ done
 AS_VAR_SET_IF([lfr_Search], , [AS_VAR_SET([lfr_Search], [no])])
 rm conftest.$ac_ext
 CFLAGS=$lfr_save_CFLAGS])
-AS_VAR_COPY([lfr_res], [lfr_Search])
+m4_ifdef([AS_VAR_COPY],
+  [AS_VAR_COPY([lfr_res],[lfr_Search])],
+  [lfr_res=AS_VAR_GET([lfr_Search])]) 
 AS_IF([test "$lfr_res" != no],
   [AS_IF([test "$lfr_res" = "yes"],
          [lfr_cflags=''], [lfr_cflags=$lfr_res])
