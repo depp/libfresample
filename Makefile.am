@@ -63,5 +63,19 @@ fresample_SOURCES = \
 
 fresample_LDADD = libfresample.la
 
-check: fresample
+check-local: fresample
 	cd tests && $(MAKE) check
+
+clean-local:
+	cd tests && $(MAKE) clean
+
+EXTRA_DIST = \
+	autogen.sh \
+	LibFResample.xcodeproj/project.pbxproj \
+	LICENSE.txt \
+	README.txt \
+	tests/benchmark.py \
+	tests/common.py \
+	tests/dumpspecs.py \
+	tests/genmake.py \
+	tests/quality.py

@@ -7,6 +7,15 @@
 .libs
 /fresample
 
+# Archives
+*.gz
+*.bz2
+*.lz
+*.lzma
+*.Z
+*.xz
+*.zip
+
 # Autotools
 /aclocal.m4
 /autom4te.cache
