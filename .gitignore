@@ -6,6 +6,7 @@
 *.la
 .libs
 /fresample
+/libfresample.so
 
 # Archives
 *.gz
@@ -16,6 +17,10 @@
 *.xz
 *.zip
 
+# Generated
+/arch.mak
+/config.mak
+
 # Autotools
 /aclocal.m4
 /autom4te.cache
@@ -23,8 +28,6 @@
 /config.h
 /config.h.in
 /config.log
-/config.mak
-/config.mak.in
 /config.status
 /config.sub
 /configure
@@ -36,7 +39,6 @@
 /missing
 /stamp-h1
 Makefile
-Makefile.in
 .deps
 .dirstamp
 

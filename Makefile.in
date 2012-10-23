@@ -1,0 +1,20 @@
+all:
+
+srcdir := @srcdir@
+export srcdir
+
+include config.mak
+
+fresample libfresample.a:
+	$(MAKE) -f $(srcdir)/arch.mak builddir=build/nopic build/nopic/$@
+	cp build/nopic/$@ $@
+
+libfresample.so:
+	$(MAKE) -f $(srcdir)/arch.mak builddir=build/pic CFLAGS="-fpic $(CFLAGS)" build/pic/$@
+	cp build/pic/$@ $@
+
+all: fresample libfresample.a libfresample.so
+
+clean:
+	rm -f fresample libfresample.a libfresample.so
+	rm -rf build
