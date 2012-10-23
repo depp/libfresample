@@ -1,9 +1,11 @@
 # Build directory and products
 /build
+/obj
 *.o
 *.lo
 *.a
 *.la
+*.dylib
 .libs
 /fresample
 /libfresample.so
@@ -18,29 +20,15 @@
 *.zip
 
 # Generated
-/arch.mak
-/config.mak
+/*.mak
 
 # Autotools
 /aclocal.m4
 /autom4te.cache
-/config.guess
-/config.h
-/config.h.in
 /config.log
 /config.status
-/config.sub
 /configure
-/depcomp
-/install-sh
-/libtool
-/ltmain.sh
-/m4/*
-/missing
-/stamp-h1
 Makefile
-.deps
-.dirstamp
 
 # Xcode
 *.mode1v3

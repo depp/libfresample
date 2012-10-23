@@ -10,83 +10,122 @@ def get_special(name):
     return None
 
 HEADER = """\
+ifeq ($(arch),)
 include config.mak
+else
+include config.$(arch).mak
+endif
 
-all_dirs := $(builddir)
+all_dirs := $(builddir)/shared $(builddir)/static $(builddir)/tool
 missing_dirs := $(filter-out $(wildcard $(all_dirs)),$(all_dirs))
 $(all_dirs):
 \tmkdir -p $@
 
+ifeq ($(UNAME_S),Darwin)
+CCSHARED :=
+else
+CCSHARED := -fpic
+endif
+
 """
 
 FOOTER = """
-$(builddir)/libfresample.a: $(lib_objs)
+
+ifeq ($(UNAME_S),Darwin)
+
+$(builddir)/libfresample.a: $(static_obj)
+\tlibtool -static -o $@ $^
+
+$(builddir)/libfresample.dylib: $(static_obj)
+\t$(CC) -o $@ -dynamiclib -install_name /Library/Frameworks/fresample.framework/Versions/A/fresample -compatibility_version 1 -current_version 1 $(LDFLAGS) $^ $(LIBS)
+
+else
+
+$(builddir)/libfresample.a: $(static_obj)
 \trm -f $@
 \tar rc $@ $^
 \tranlib $@
 
-# libtool -arch_only i386 -static -o $@ $^
-
-$(builddir)/libfresample.so: $(lib_objs)
+$(builddir)/libfresample.so: $(shared_obj)
 \t$(CC) -o $@ -shared -Wl,-soname,libfresample.so.1 $(LDFLAGS) $^ $(LIBS)
 
-$(builddir)/fresample: $(lib_objs) $(src_objs)
+endif
+
+$(builddir)/fresample: $(tool_obj) $(builddir)/libfresample.a
 \t$(CC) -o $@ $(LDFLAGS) $^ $(LIBS)
 """
+
+def get_sources(dirpath):
+    sources = {}
+    for name in os.listdir(dirpath):
+        if name.startswith('.'):
+            continue
+        base, ext = os.path.splitext(name)
+        path = dirpath + '/' + name
+        if ext == '.h':
+            s = 'include'
+        elif ext == '.c':
+            s = get_special(base)
+            if s is None:
+                s = 'base'
+        else:
+            continue
+        try:
+            sources[s].append(path)
+        except KeyError:
+            sources[s] = [path]
+    return sources
+
+def build_sources(fp, name, sources, **kw):
+    cflags = kw.get('cflags', '')
+    prefix = kw.get('prefix', '')
+
+    for s in ['base'] + ALL_SPECIAL:
+        try:
+            srclist = sources[s]
+        except KeyError:
+            continue
+
+        if s == 'base':
+            s_cflags = ''
+        else:
+            s_cflags = '$(%s_CFLAGS)' % s.upper()
+
+        rule = '\t$(CC) -c -o $@ $< -I$(srcdir)/include $(CPPFLAGS) ' \
+            '%s %s $(CWARN) $(CFLAGS)\n' % (s_cflags, cflags)
+
+        objlist = []
+        for src in sorted(srclist):
+            base = os.path.splitext(os.path.split(src)[1])[0]
+            obj = '$(builddir)/' + prefix + base + '.o'
+            src = '$(srcdir)/' + src
+            objlist.append(obj)
+            fp.write('%s: %s $(missing_dirs)\n' % (obj, src))
+            fp.write(rule)
+
+        objlist = ' '.join(objlist)
+        if s == 'base':
+            fp.write('%s := %s\n' % (name, objlist))
+        else:
+            fp.write(
+                'ifeq ($(%s_ENABLED),1)\n'
+                '%s += %s\n'
+                'endif\n'
+                % (s.upper(), name, objlist))
 
 def run():
     fp = open('arch.mak', 'w')
     fp.write(HEADER)
-    includes = []
-    for dirname in ('lib', 'src'):
-        sources = {}
-        for name in os.listdir(dirname):
-            if name.startswith('.'):
-                continue
-            base, ext = os.path.splitext(name)
-            path = dirname + '/' + name
-            if ext == '.h':
-                includes.append(path)
-            elif ext == '.c':
-                s = get_special(base)
-                if s is None:
-                    s = 'base'
-                try:
-                    sources[s].append(path)
-                except KeyError:
-                    sources[s] = [path]
 
-        for s in ['base'] + ALL_SPECIAL:
-            try:
-                srclist = sources[s]
-            except KeyError:
-                continue
-
-            cflags = '$(CFLAGS)'
-            if s != 'base':
-                cflags = '$(%s_CFLAGS) %s' % (s.upper(), cflags)
-            rule = '\t$(CC) -c -o $@ $< ' \
-                   '-I$(srcdir)/include $(CPPFLAGS) $(CWARN) %s\n' % (cflags)
-
-            srclist.sort()
-            objlist = []
-            for src in srclist:
-                base = os.path.splitext(os.path.split(src)[1])[0]
-                obj = '$(builddir)/' + base + '.o'
-                src = '$(srcdir)/' + src
-                objlist.append(obj)
-                fp.write('%s: %s $(missing_dirs)\n' % (obj, src))
-                fp.write(rule)
-
-            objlist = ' '.join(objlist)
-            if s == 'base':
-                fp.write('%s_objs := %s\n' % (dirname, objlist))
-            else:
-                fp.write(
-                    'ifeq ($(%s_ENABLED),1)\n'
-                    '%s_objs += %s\n'
-                    'endif\n'
-                    % (s.upper(), dirname, objlist))
+    lib_src = get_sources('lib')
+    tool_src = get_sources('src')
+    build_sources(fp, 'shared_obj', lib_src,
+                  prefix='shared/', cflags='$(CCSHARED)')
+    fp.write('\n')
+    build_sources(fp, 'static_obj', lib_src,
+                  prefix='static/')
+    fp.write('\n')
+    build_sources(fp, 'tool_obj', tool_src, prefix='tool/')
 
     fp.write(FOOTER)
     fp.close()

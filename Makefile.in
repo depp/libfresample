@@ -1,20 +1,52 @@
 all:
 
 srcdir := @srcdir@
-export srcdir
+UNAME_S := @UNAME_S@
+ARCHS := @ARCHS@
 
-include config.mak
+ifeq ($(UNAME_S),Darwin)
+so_ext := dylib
+else
+so_ext := so
+endif
 
-fresample libfresample.a:
-	$(MAKE) -f $(srcdir)/arch.mak builddir=build/nopic build/nopic/$@
-	cp build/nopic/$@ $@
+ifeq ($(ARCHS),)
 
-libfresample.so:
-	$(MAKE) -f $(srcdir)/arch.mak builddir=build/pic CFLAGS="-fpic $(CFLAGS)" build/pic/$@
-	cp build/pic/$@ $@
+obj/fresample obj/libfresample.a obj/libfresample.$(so_ext):
+	$(MAKE) -f $(srcdir)/arch.mak builddir=obj srcdir=$(srcdir) $@
 
-all: fresample libfresample.a libfresample.so
+fresample: obj/fresample
+	cp $< $@
+
+libfresample.a: obj/libfresample.a
+	cp $< $@
+
+libfresample.$(so_ext): obj/libfresample.$(so_ext)
+	cp $< $@
+
+else
+
+tool_archs := $(foreach arch,$(ARCHS),obj/$(arch)/fresample)
+static_archs := $(foreach arch,$(ARCHS),obj/$(arch)/libfresample.a)
+shared_archs := $(foreach arch,$(ARCHS),obj/$(arch)/libfresample.$(so_ext))
+bin_archs := $(tool_archs) $(static_archs) $(shared_archs)
+
+$(bin_archs):
+	make -f arch.mak builddir=$(patsubst %/,%,$(dir $@)) srcdir=. arch=$(patsubst obj/%/,%,$(dir $@)) $@
+
+fresample: $(tool_archs)
+	lipo -create $^ -output $@
+
+libfresample.a: $(static_archs)
+	libtool -static $^ -o $@
+
+libfresample.$(so_ext): $(shared_archs)
+	lipo -create $^ -output $@
+
+endif
+
+all: fresample libfresample.a libfresample.$(so_ext)
 
 clean:
-	rm -f fresample libfresample.a libfresample.so
-	rm -rf build
+	rm -f fresample libfresample.a libfresample.$(so_ext)
+	rm -rf obj
