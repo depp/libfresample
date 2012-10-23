@@ -77,7 +77,7 @@ LFR_CHECK_CFLAGS(
 
 LFR_CHECK_CFLAGS(
   [altivec], [AltiVec],
-  ['-DINCLUDE_ALTIVEC_H' '-faltivec' '-maltivec -DINCLUDE_ALTIVEC_H'],
+  ['-faltivec' '-DINCLUDE_ALTIVEC_H' '-maltivec -DINCLUDE_ALTIVEC_H'],
   [[
 #ifdef INCLUDE_ALTIVEC_H
 #include <altivec.h>
