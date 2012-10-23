@@ -64,7 +64,7 @@ def run():
 
             cflags = '$(CFLAGS)'
             if s != 'base':
-                cflags = '$(%s_FLAGS) %s' % (s.upper(), cflags)
+                cflags = '$(%s_CFLAGS) %s' % (s.upper(), cflags)
             rule = '\t$(CC) -c -o $@ $< ' \
                    '-I$(srcdir)/include $(CPPFLAGS) $(CWARN) %s\n' % (cflags)
 
@@ -83,7 +83,7 @@ def run():
                 fp.write('%s_objs := %s\n' % (dirname, objlist))
             else:
                 fp.write(
-                    'ifeq ($(USE_%s),1)\n'
+                    'ifeq ($(%s_ENABLED),1)\n'
                     '%s_objs += %s\n'
                     'endif\n'
                     % (s.upper(), dirname, objlist))

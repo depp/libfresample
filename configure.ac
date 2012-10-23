@@ -59,9 +59,11 @@ AS_IF([test "$lfr_res" != no],
   [AS_IF([test "$lfr_res" = "yes"],
          [lfr_cflags=''], [lfr_cflags=$lfr_res])
    AC_DEFINE(AS_TR_CPP([HAVE_$1]), [1], [Define if $2 is supported.])
-   AC_SUBST(AS_TR_CPP([USE_$1]), [1])
+   AC_SUBST(AS_TR_CPP([$1])[_ENABLED], [1])
+   AC_SUBST(AS_TR_CPP([$1])[_CFLAGS], [$lfr_cflags])
    $6],
-  [AC_SUBST(AS_TR_CPP([USE_$1]), [0])
+  [AC_SUBST(AS_TR_CPP([$1])[_ENABLED], [0])
+   AC_SUBST(AS_TR_CPP([$1])[_CFLAGS], [])
    $7])
 AS_VAR_POPDEF([lfr_Search])])
 
