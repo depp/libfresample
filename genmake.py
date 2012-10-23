@@ -66,7 +66,7 @@ def run():
             if s != 'base':
                 cflags = '$(%s_FLAGS) %s' % (s.upper(), cflags)
             rule = '\t$(CC) -c -o $@ $< ' \
-                   '-I$(srcdir)/include $(CPPFLAGS) %s\n' % (cflags)
+                   '-I$(srcdir)/include $(CPPFLAGS) $(CWARN) %s\n' % (cflags)
 
             srclist.sort()
             objlist = []
