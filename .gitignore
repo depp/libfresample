@@ -9,6 +9,7 @@
 .libs
 /fresample
 /libfresample.so
+/fresample.framework
 
 # Archives
 *.gz

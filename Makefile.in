@@ -45,6 +45,34 @@ libfresample.$(so_ext): $(shared_archs)
 
 endif
 
+ifeq ($(UNAME_S),Darwin)
+fw_dirs := \
+fresample.framework/Versions/A/Headers \
+fresample.framework/Versions/A/Resources
+missing_fw_dirs := $(filter-out $(wildcard $(fw_dirs)),$(fw_dirs))
+$(fw_dirs):
+	mkdir -p $@
+fresample.framework/Versions/A/fresample: libfresample.dylib $(missing_fw_dirs)
+	strip -S -o $@ $<
+fresample.framework/Versions/A/Headers/fresample.h: $(srcdir)/include/fresample.h $(missing_fw_dirs)
+	cp $< $@
+fresample.framework/Versions/A/Resources/Info.plist: $(srcdir)/fresample-Info.plist $(missing_fw_dirs)
+	sed -e 's,$${EXECUTABLE_NAME},fresample,' <$< >$@
+fresample.framework/Versions/Current:
+	ln -s A $@
+fresample.framework/Headers:
+	ln -s Versions/Current/Headers $@
+fresample.framework/Resources:
+	ln -s Versions/Current/Resources $@
+fresample.framework/fresample:
+	ln -s Versions/Current/fresample $@
+fresample.framework: fresample.framework/Versions/A/fresample fresample.framework/Versions/A/Headers/fresample.h fresample.framework/Versions/A/Resources/Info.plist fresample.framework/Versions/Current fresample.framework/Headers fresample.framework/Resources fresample.framework/fresample
+	touch $@
+fresample.framework.dSYM: libfresample.dylib
+	dsymutil $< -o $@
+all: fresample.framework fresample.framework.dSYM
+endif
+
 all: fresample libfresample.a libfresample.$(so_ext)
 
 clean:
