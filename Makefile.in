@@ -7,6 +7,13 @@ ARCHS := @ARCHS@
 PACKAGE_NAME := @PACKAGE_NAME@
 PACKAGE_VERSION := @PACKAGE_VERSION@
 
+# ========== Makefiles ==========
+
+.PRECIOUS: Makefile
+
+Makefile: $(srcdir)/Makefile.in config.status
+	sh config.status
+
 # ========== Binaries ==========
 
 ifeq ($(UNAME_S),Darwin)
