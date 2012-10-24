@@ -12,6 +12,8 @@ ARCHS := @ARCHS@
 PACKAGE_NAME := @PACKAGE_NAME@
 PACKAGE_VERSION := @PACKAGE_VERSION@
 
+export srcdir
+
 # We recurse into the same directory multiple times
 # doing this in parallel doesn't work
 
@@ -24,18 +26,39 @@ PACKAGE_VERSION := @PACKAGE_VERSION@
 Makefile: $(srcdir)/Makefile.in config.status
 	sh config.status
 
-# ========== Binaries ==========
+# ========== Lots of variables ==========
+
+# Incremented whenever functionality is removed
+ver_maj := 1
+# Incremented whenever functionality is added
+ver_min := 0
+# Incremented whenever the code changes
+ver_rev := 0
+
+export ver_maj
+export ver_min
+export ver_rev
 
 ifeq ($(UNAME_S),Darwin)
-so_ext := dylib
+so_name := libfresample.dylib
+so_name1 := libfresample.$(ver_maj).dylib
+so_name2 := libfresample.$(ver_maj).$(ver_min).$(ver_rev).dylib
 else
-so_ext := so
+so_name := libfresample.so
+so_name1 := libfresample.so.$(ver_maj)
+so_name2 := libfresample.so.$(ver_maj).$(ver_min).$(ver_rev)
 endif
+
+export so_name
+export so_name1
+export so_name2
+
+# ========== Binaries ==========
 
 ifeq ($(ARCHS),)
 
-obj/fresample obj/libfresample.a obj/libfresample.$(so_ext):
-	$(MAKE) -f $(srcdir)/arch.mak builddir=obj srcdir=$(srcdir) $@
+obj/fresample obj/libfresample.a obj/$(so_name):
+	$(MAKE) -f $(srcdir)/arch.mak builddir=obj  $@
 
 fresample: obj/fresample
 	cp $< $@
@@ -43,18 +66,18 @@ fresample: obj/fresample
 libfresample.a: obj/libfresample.a
 	cp $< $@
 
-libfresample.$(so_ext): obj/libfresample.$(so_ext)
+$(so_name): obj/$(so_name)
 	cp $< $@
 
 else
 
 tool_archs := $(foreach arch,$(ARCHS),obj/$(arch)/fresample)
 static_archs := $(foreach arch,$(ARCHS),obj/$(arch)/libfresample.a)
-shared_archs := $(foreach arch,$(ARCHS),obj/$(arch)/libfresample.$(so_ext))
+shared_archs := $(foreach arch,$(ARCHS),obj/$(arch)/$(so_name))
 bin_archs := $(tool_archs) $(static_archs) $(shared_archs)
 
 $(bin_archs):
-	make -f arch.mak builddir=$(patsubst %/,%,$(dir $@)) srcdir=. arch=$(patsubst obj/%/,%,$(dir $@)) $@
+	make -f arch.mak builddir=$(patsubst %/,%,$(dir $@)) arch=$(patsubst obj/%/,%,$(dir $@)) $@
 
 fresample: $(tool_archs)
 	lipo -create $^ -output $@
@@ -62,7 +85,7 @@ fresample: $(tool_archs)
 libfresample.a: $(static_archs)
 	libtool -static $^ -o $@
 
-libfresample.$(so_ext): $(shared_archs)
+$(so_name): $(shared_archs)
 	lipo -create $^ -output $@
 
 endif
@@ -138,17 +161,17 @@ dist-xz: $(distname).tar.xz
 
 # ========== Install ==========
 
-install-lib: libfresample.a libfresample.$(so_ext)
+install-lib: libfresample.a $(so_name)
 	test -d "$(DESTDIR)$(libdir)" || \
 		mkdir -p "$(DESTDIR)$(libdir)"
 	install -s -m 644 libfresample.a \
 		"$(DESTDIR)$(libdir)/libfresample.a"
-	install -s -m 644 libfresample.$(so_ext) \
-		"$(DESTDIR)$(libdir)/libfresample.so.0.0.0"
+	install -s -m 644 $(so_name) \
+		"$(DESTDIR)$(libdir)/$(so_name2)"
 	cd "$(DESTDIR)$(libdir)" && \
-		ln -s -f libfresample.so.0.0.0 libfresample.so.0
+		ln -s -f $(so_name2) $(so_name1)
 	cd "$(DESTDIR)$(libdir)" && \
-		ln -s -f libfresample.so.0.0.0 libfresample.so
+		ln -s -f $(so_name2) $(so_name)
 
 install-include:
 	test -d "$(DESTDIR)$(includedir)/fresample" || \
@@ -160,10 +183,10 @@ install: install-lib install-include
 
 # ========== Simple pseudo targets ==========
 
-all: fresample libfresample.a libfresample.$(so_ext)
+all: fresample libfresample.a $(so_name)
 
 clean:
-	rm -f fresample libfresample.a libfresample.$(so_ext)
+	rm -f fresample libfresample.a $(so_name)
 	rm -rf obj
 	rm -f tests/*.wav tests/*.png \
 		$(addprefix "$(distname)",.tar.gz .tar.xz)

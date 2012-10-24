@@ -36,8 +36,8 @@ ifeq ($(UNAME_S),Darwin)
 $(builddir)/libfresample.a: $(static_obj)
 \tlibtool -static -o $@ $^
 
-$(builddir)/libfresample.dylib: $(static_obj)
-\t$(CC) -o $@ -dynamiclib -install_name /Library/Frameworks/fresample.framework/Versions/A/fresample -compatibility_version 1 -current_version 1 $(LDFLAGS) $^ $(LIBS)
+$(builddir)/$(so_name): $(static_obj)
+\t$(CC) -o $@ -dynamiclib -install_name /Library/Frameworks/fresample.framework/Versions/A/fresample -compatibility_version $(ver_maj).$(ver_min) -current_version $(ver_maj).$(ver_min) $(LDFLAGS) $^ $(LIBS)
 
 else
 
@@ -46,8 +46,8 @@ $(builddir)/libfresample.a: $(static_obj)
 \tar rc $@ $^
 \tranlib $@
 
-$(builddir)/libfresample.so: $(shared_obj)
-\t$(CC) -o $@ -shared -Wl,-soname,libfresample.so.1 $(LDFLAGS) $^ $(LIBS)
+$(builddir)/$(so_name): $(shared_obj)
+\t$(CC) -o $@ -shared -Wl,-soname,$(so_name1) $(LDFLAGS) $^ $(LIBS)
 
 endif
 
