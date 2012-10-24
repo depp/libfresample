@@ -4,6 +4,11 @@ srcdir := @srcdir@
 UNAME_S := @UNAME_S@
 ARCHS := @ARCHS@
 
+PACKAGE_NAME := @PACKAGE_NAME@
+PACKAGE_VERSION := @PACKAGE_VERSION@
+
+# ========== Binaries ==========
+
 ifeq ($(UNAME_S),Darwin)
 so_ext := dylib
 else
@@ -45,6 +50,8 @@ libfresample.$(so_ext): $(shared_archs)
 
 endif
 
+# ========== Framework ==========
+
 ifeq ($(UNAME_S),Darwin)
 fw_dirs := \
 fresample.framework/Versions/A/Headers \
@@ -73,8 +80,54 @@ fresample.framework.dSYM: libfresample.dylib
 all: fresample.framework fresample.framework.dSYM
 endif
 
+# ========== Dist ==========
+
+distname := $(PACKAGE_NAME)-$(PACKAGE_VERSION)
+distfiles := \
+	LICENSE.txt \
+	LibFResample.xcodeproj/project.pbxproj \
+	LibFResample_Xcode3.xcodeproj/project.pbxproj \
+	Makefile.in \
+	README.txt \
+	arch.mak \
+	autogen.sh \
+	comparison.txt \
+	configure \
+	configure.ac \
+	fresample-Info.plist \
+	genmake.py \
+	include/*.h \
+	lib/*.[ch] \
+	src/*.[ch] \
+	tests/Makefile.in \
+	tests/benchmark.py \
+	tests/common.py \
+	tests/dumpspecs.py \
+	tests/genmake.py \
+	tests/quality.py \
+	tests/test.sh.in
+
+dist_tar := tar c -C "$(srcdir)" $(distfiles) --transform 's,^,$(distname)/,'
+
+$(distname).tar.gz:
+	$(dist_tar) | gzip -9 > $@
+
+$(distname).tar.xz:
+	$(dist_tar) | xz > $@
+
+dist-gz: $(distname).tar.gz
+
+dist-xz: $(distname).tar.xz
+
+# ========== Pseudo targets ==========
+
 all: fresample libfresample.a libfresample.$(so_ext)
 
 clean:
 	rm -f fresample libfresample.a libfresample.$(so_ext)
 	rm -rf obj
+	rm -f tests/*.wav tests/*.png \
+		$(addprefix "$(distname)",.tar.gz .tar.xz)
+
+check: fresample
+	cd tests; $(MAKE) check
