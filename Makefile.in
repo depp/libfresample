@@ -1,11 +1,21 @@
 all:
 
 srcdir := @srcdir@
+
+prefix := @prefix@
+exec_prefix := @exec_prefix@
+libdir := @libdir@
+includedir := @includedir@
+
 UNAME_S := @UNAME_S@
 ARCHS := @ARCHS@
-
 PACKAGE_NAME := @PACKAGE_NAME@
 PACKAGE_VERSION := @PACKAGE_VERSION@
+
+# We recurse into the same directory multiple times
+# doing this in parallel doesn't work
+
+.NOTPARALLEL:
 
 # ========== Makefiles ==========
 
@@ -126,7 +136,29 @@ dist-gz: $(distname).tar.gz
 
 dist-xz: $(distname).tar.xz
 
-# ========== Pseudo targets ==========
+# ========== Install ==========
+
+install-lib: libfresample.a libfresample.$(so_ext)
+	test -d "$(DESTDIR)$(libdir)" || \
+		mkdir -p "$(DESTDIR)$(libdir)"
+	install -s -m 644 libfresample.a \
+		"$(DESTDIR)$(libdir)/libfresample.a"
+	install -s -m 644 libfresample.$(so_ext) \
+		"$(DESTDIR)$(libdir)/libfresample.so.0.0.0"
+	cd "$(DESTDIR)$(libdir)" && \
+		ln -s -f libfresample.so.0.0.0 libfresample.so.0
+	cd "$(DESTDIR)$(libdir)" && \
+		ln -s -f libfresample.so.0.0.0 libfresample.so
+
+install-include:
+	test -d "$(DESTDIR)$(includedir)/fresample" || \
+		mkdir -p "$(DESTDIR)$(includedir)/fresample"
+	install -m 644 "$(srcdir)/include/fresample.h" \
+		"$(DESTDIR)$(includedir)/fresample/fresample.h"
+
+install: install-lib install-include
+
+# ========== Simple pseudo targets ==========
 
 all: fresample libfresample.a libfresample.$(so_ext)
 
