@@ -16,6 +16,12 @@ else
 include config.$(arch).mak
 endif
 
+depflags = -MF $@.d -MMD -MP
+depfiles := $(wildcard $(builddir)/*/*.d)
+ifneq ($(depfiles),)
+include $(depfiles)
+endif
+
 all_dirs := $(builddir)/shared $(builddir)/static $(builddir)/tool
 missing_dirs := $(filter-out $(wildcard $(all_dirs)),$(all_dirs))
 $(all_dirs):
@@ -91,8 +97,8 @@ def build_sources(fp, name, sources, **kw):
         else:
             s_cflags = '$(%s_CFLAGS)' % s.upper()
 
-        rule = '\t$(CC) -c -o $@ $< -I$(srcdir)/include $(CPPFLAGS) ' \
-            '%s %s $(CWARN) $(CFLAGS)\n' % (s_cflags, cflags)
+        rule = '\t$(CC) -c -o $@ $< -I$(srcdir)/include $(depflags) ' \
+               '$(CPPFLAGS) %s %s $(CWARN) $(CFLAGS)\n' % (s_cflags, cflags)
 
         objlist = []
         for src in sorted(srclist):
