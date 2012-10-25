@@ -100,15 +100,29 @@ else
   ARCHS=
 fi
 
-lfr_narch_CFLAGS=$CFLAGS
-lfr_narch_LDFLAGS=$LDFLAGS
+lfr_vars="CC CFLAGS CPPFLAGS CWARN LDFLAGS LIBS"
+for lfr_var in $lfr_vars ; do
+  eval lfr_narch_${lfr_var}=\$${lfr_var}
+done
 ARCHS=
 for lfr_arch in $lfr_archs ; do
   if test $lfr_universal = yes ; then
-    CFLAGS="-arch $lfr_arch $lfr_narch_CFLAGS"
-    LDFLAGS="-arch $lfr_arch $lfr_narch_LDFLAGS"
+    lfr_uarch=`echo $lfr_arch | tr a-z A-Z`
+    for lfr_var in CFLAGS LDFLAGS ; do
+      eval ${lfr_var}_${lfr_uarch}=\${${lfr_var}_${lfr_uarch}-"-arch ${lfr_arch}"}
+    done
+    for lfr_var in $lfr_vars ; do
+      case $lfr_var in
+      CC)
+        eval $lfr_var=\${${lfr_var}_${lfr_uarch}:-\$lfr_narch_${lfr_var}}
+        ;;
+      *)
+        eval $lfr_var=\"\$lfr_narch_${lfr_var}\ \$${lfr_var}_${lfr_uarch}\"
+        ;;
+      esac
+    done
     AC_MSG_CHECKING([for $lfr_arch architecture])
-    AC_LANG_CONFTEST([AC_LANG_PROGRAM([$4], [$5])])
+    AC_LANG_CONFTEST([AC_LANG_PROGRAM([], [])])
     AC_LINK_IFELSE([], [
       AC_MSG_RESULT([yes])
     ], [
@@ -125,16 +139,9 @@ for lfr_arch in $lfr_archs ; do
   fi
   ARCHS="$ARCHS $lfr_arch"
 
-  cat >$lfr_config <<EOF
-UNAME_S := $UNAME_S
-UNAME_M := $UNAME_M
-CC := $CC
-CFLAGS := $CFLAGS
-CPPFLAGS := $CPPFLAGS $DEFS
-CWARN := $CWARN
-LDFLAGS := $LDFLAGS
-LIBS := $LIBS
-EOF
+  for lfr_var in UNAME_S UNAME_M $lfr_vars ; do
+    eval 'echo "'${lfr_var}' := $'${lfr_var}'"'
+  done >$lfr_config
 
   LFR_CHECK_CFLAGS(
     [sse2], [SSE2], [-msse2],
