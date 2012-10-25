@@ -104,17 +104,21 @@ lfr_narch_CFLAGS=$CFLAGS
 lfr_narch_LDFLAGS=$LDFLAGS
 ARCHS=
 for lfr_arch in $lfr_archs ; do
-  AC_LANG_CONFTEST([AC_LANG_PROGRAM([$4], [$5])])
   if test $lfr_universal = yes ; then
-    AC_LINK_IFELSE([], [], [
+    CFLAGS="-arch $lfr_arch $lfr_narch_CFLAGS"
+    LDFLAGS="-arch $lfr_arch $lfr_narch_LDFLAGS"
+    AC_MSG_CHECKING([for $lfr_arch architecture])
+    AC_LANG_CONFTEST([AC_LANG_PROGRAM([$4], [$5])])
+    AC_LINK_IFELSE([], [
+      AC_MSG_RESULT([yes])
+    ], [
+      AC_MSG_RESULT([no])
       if test $lfr_auto_arch = yes ; then
         continue
       else
-        AC_ERROR([Cannot compile for $lfr_arch architecture.])
+        AC_ERROR([cannot compile for $lfr_arch architecture.])
       fi
     ])
-    CFLAGS="-arch $lfr_arch $lfr_narch_CFLAGS"
-    LDFLAGS="-arch $lfr_arch $lfr_narch_LDFLAGS"
     lfr_config=config.$lfr_arch.mak
   else
     lfr_config=config.mak
@@ -152,7 +156,7 @@ if test $lfr_universal != yes ; then
   ARCHS=
 else
   if test -z "$ARCHS" ; then
-    AC_ERROR([No architectures selected.])
+    AC_ERROR([cannot create universal binary.])
   fi
 fi
 
