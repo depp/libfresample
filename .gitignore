@@ -1,15 +1,12 @@
 # Build directory and products
-/build
-/obj
+/arch-*
+/arch.mak*
 *.o
-*.lo
+*.so
 *.a
-*.la
 *.dylib
-.libs
+*.framework
 /fresample
-/libfresample.so
-/fresample.framework
 
 # Archives
 *.gz
@@ -19,9 +16,6 @@
 *.Z
 *.xz
 *.zip
-
-# Generated
-/*.mak
 
 # Autotools
 /aclocal.m4

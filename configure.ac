@@ -1,7 +1,7 @@
 AC_PREREQ(2.61)
 AC_INIT([libfresample], [0.1], [depp@zdome.net])
 AC_CONFIG_SRCDIR([lib/resample.c])
-AC_CONFIG_FILES([Makefile tests/Makefile])
+AC_CONFIG_FILES([arch.mak Makefile tests/Makefile])
 AC_CONFIG_FILES([tests/test.sh], [chmod +x tests/test.sh])
 
 dnl We should be using AC_CANONICAL_HOST
@@ -15,14 +15,21 @@ AC_DEFUN([GET_UNAME], [
   $1="${$1:-unknown}"
 ])
 GET_UNAME([UNAME_S], [-s])
-GET_UNAME([UNAME_M], [-m])
 AC_SUBST([UNAME_S])
-AC_SUBST([UNAME_M])
-
-AC_ARG_ENABLE([universal],
-  AS_HELP_STRING([--enable-universal], [enable OS X universal build]))
 
 AC_PROG_CC
+
+if test "x$lfr_arch" != x ; then
+  CFLAGS="$CFLAGS -arch $lfr_arch"
+  LDFLAGS="$LDFLAGS -arch $lfr_arch"
+  ARCHS=
+  adir=arch-$lfr_arch
+  asfx=_$lfr_arch
+else
+  ARCHS=$lfr_archs
+  adir=.
+  asfx=
+fi
 
 AC_CHECK_LIB([m], [cos])
 
@@ -71,102 +78,31 @@ AS_IF([test "$lfr_res" != no],
   [AS_IF([test "$lfr_res" = "yes"],
          [lfr_cflags=''], [lfr_cflags=$lfr_res])
    dnl AC_DEFINE(AS_TR_CPP([HAVE_$1]), [1], [Define if $2 is supported.])
-   cat >>$lfr_config <<EOF
-AS_TR_CPP([$1])_ENABLED := 1
-AS_TR_CPP([$1])_CFLAGS := $lfr_cflags
-EOF
-], [cat >>$lfr_config <<EOF
-AS_TR_CPP([$1])_ENABLED := 0
-EOF
-])
+   AS_TR_CPP([$1])_ENABLED=1
+   AS_TR_CPP([$1])_CFLAGS=$lfr_cflags],
+  [AS_TR_CPP([$1])_ENABLED=0])
+AC_SUBST(AS_TR_CPP([$1])_ENABLED)
+AC_SUBST(AS_TR_CPP([$1])_CFLAGS)
 ])
 
-if test "x$enable_universal" = xyes ; then
-  if test "x$UNAME_S" = xDarwin ; then
-    lfr_archs="i386 x86_64 ppc"
-  else
-    AC_ERROR([Cannot do universal build except on Darwin.])
-  fi
-  lfr_universal=yes
-  if test -z "$ARCHS" ; then
-    lfr_auto_arch=yes
-  else
-    lfr_archs=$ARCHS
-    lfr_auto_arch=no
-  fi
-else
-  lfr_universal=no
-  lfr_archs=default
-  ARCHS=
-fi
+LFR_CHECK_CFLAGS(
+  [sse2], [SSE2], [-msse2],
+  [[#include <emmintrin.h>]],
+  [[__m128i x = _mm_set1_epi32(15)]])
 
-lfr_vars="CC CFLAGS CPPFLAGS CWARN LDFLAGS LIBS"
-for lfr_var in $lfr_vars ; do
-  eval lfr_narch_${lfr_var}=\$${lfr_var}
-done
-ARCHS=
-for lfr_arch in $lfr_archs ; do
-  if test $lfr_universal = yes ; then
-    lfr_uarch=`echo $lfr_arch | tr a-z A-Z`
-    for lfr_var in CFLAGS LDFLAGS ; do
-      eval ${lfr_var}_${lfr_uarch}=\${${lfr_var}_${lfr_uarch}-"-arch ${lfr_arch}"}
-    done
-    for lfr_var in $lfr_vars ; do
-      case $lfr_var in
-      CC)
-        eval $lfr_var=\${${lfr_var}_${lfr_uarch}:-\$lfr_narch_${lfr_var}}
-        ;;
-      *)
-        eval $lfr_var=\"\$lfr_narch_${lfr_var}\ \$${lfr_var}_${lfr_uarch}\"
-        ;;
-      esac
-    done
-    AC_MSG_CHECKING([for $lfr_arch architecture])
-    AC_LANG_CONFTEST([AC_LANG_PROGRAM([], [])])
-    AC_LINK_IFELSE([], [
-      AC_MSG_RESULT([yes])
-    ], [
-      AC_MSG_RESULT([no])
-      if test $lfr_auto_arch = yes ; then
-        continue
-      else
-        AC_ERROR([cannot compile for $lfr_arch architecture.])
-      fi
-    ])
-    lfr_config=config.$lfr_arch.mak
-  else
-    lfr_config=config.mak
-  fi
-  ARCHS="$ARCHS $lfr_arch"
-
-  for lfr_var in UNAME_S UNAME_M $lfr_vars ; do
-    eval 'echo "'${lfr_var}' := $'${lfr_var}'"'
-  done >$lfr_config
-
-  LFR_CHECK_CFLAGS(
-    [sse2], [SSE2], [-msse2],
-    [[#include <emmintrin.h>]],
-    [[__m128i x = _mm_set1_epi32(15)]])
-  
-  LFR_CHECK_CFLAGS(
-    [altivec], [AltiVec],
-    ['-faltivec' '-DINCLUDE_ALTIVEC_H' '-maltivec -DINCLUDE_ALTIVEC_H'],
-    [[
+LFR_CHECK_CFLAGS(
+  [altivec], [AltiVec],
+  ['-faltivec' '-DINCLUDE_ALTIVEC_H' '-maltivec -DINCLUDE_ALTIVEC_H'],
+  [[
 #ifdef INCLUDE_ALTIVEC_H
 #include <altivec.h>
 #endif
-    ]], [[vector signed int x = vec_splat_s32(5)]])
+  ]], [[vector signed int x = vec_splat_s32(5)]])
 
-done
-
-if test $lfr_universal != yes ; then
-  ARCHS=
-else
-  if test -z "$ARCHS" ; then
-    AC_ERROR([cannot create universal binary.])
-  fi
-fi
-
+CCSHARED=-fpic
 AC_SUBST([ARCHS])
+AC_SUBST([asfx])
+AC_SUBST([adir])
+AC_SUBST([CCSHARED])
 
 AC_OUTPUT

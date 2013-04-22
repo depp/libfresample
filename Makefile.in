@@ -11,22 +11,25 @@ UNAME_S := @UNAME_S@
 ARCHS := @ARCHS@
 PACKAGE_NAME := @PACKAGE_NAME@
 PACKAGE_VERSION := @PACKAGE_VERSION@
-
-export srcdir
-
-# We recurse into the same directory multiple times
-# doing this in parallel doesn't work
-
-.NOTPARALLEL:
+depflags = -MF $@.d -MMD -MP
 
 # ========== Makefiles ==========
 
 .PRECIOUS: Makefile
 
+ifeq ($(ARCHS),)
 Makefile: $(srcdir)/Makefile.in config.status
 	sh config.status
+else
+Makefile: $(srcdir)/Makefile.in config.status
+	for arch in $(ARCHS) ; do \
+		sh arch-$$arch/config.status && \
+		mv arch.mak arch-$$arch/arch.mak ; \
+	done
+	sh config.status
+endif
 
-# ========== Lots of variables ==========
+# ========== Version numbers ==========
 
 # Incremented whenever functionality is removed
 ver_maj := 1
@@ -34,10 +37,6 @@ ver_maj := 1
 ver_min := 0
 # Incremented whenever the code changes
 ver_rev := 0
-
-export ver_maj
-export ver_min
-export ver_rev
 
 ifeq ($(UNAME_S),Darwin)
 so_name := libfresample.dylib
@@ -49,43 +48,26 @@ so_name1 := libfresample.so.$(ver_maj)
 so_name2 := libfresample.so.$(ver_maj).$(ver_min).$(ver_rev)
 endif
 
-export so_name
-export so_name1
-export so_name2
-
 # ========== Binaries ==========
 
 ifeq ($(ARCHS),)
 
-obj/fresample obj/libfresample.a obj/$(so_name):
-	$(MAKE) -f $(srcdir)/arch.mak builddir=obj  $@
-
-fresample: obj/fresample
-	cp $< $@
-
-libfresample.a: obj/libfresample.a
-	cp $< $@
-
-$(so_name): obj/$(so_name)
-	cp $< $@
+include arch.mak
 
 else
 
-tool_archs := $(foreach arch,$(ARCHS),obj/$(arch)/fresample)
-static_archs := $(foreach arch,$(ARCHS),obj/$(arch)/libfresample.a)
-shared_archs := $(foreach arch,$(ARCHS),obj/$(arch)/$(so_name))
-bin_archs := $(tool_archs) $(static_archs) $(shared_archs)
-
-$(bin_archs):
-	make -f arch.mak builddir=$(patsubst %/,%,$(dir $@)) arch=$(patsubst obj/%/,%,$(dir $@)) $@
-
-fresample: $(tool_archs)
-	lipo -create $^ -output $@
+include $(foreach arch,$(ARCHS),arch-$(arch)/arch.mak)
+static_archs := $(foreach arch,$(ARCHS),arch-$(arch)/libfresample.a)
+shared_archs := $(foreach arch,$(ARCHS),arch-$(arch)/$(so_name))
+tool_archs := $(foreach arch,$(ARCHS),arch-$(arch)/fresample)
 
 libfresample.a: $(static_archs)
 	libtool -static $^ -o $@
 
 $(so_name): $(shared_archs)
+	lipo -create $^ -output $@
+
+fresample: $(tool_archs)
 	lipo -create $^ -output $@
 
 endif
@@ -187,7 +169,10 @@ all: fresample libfresample.a $(so_name)
 
 clean:
 	rm -f fresample libfresample.a $(so_name)
-	rm -rf obj
+	rm -f arch-*/fresample* arch-*/libfresample.a arch-*/$(so_name)
+	rm -rf arch-*/shared arch-*/static arch-*/tool
+	rm -rf fresample.framework
+	rm -rf shared static tool
 	rm -f tests/*.wav tests/*.png \
 		$(addprefix "$(distname)",.tar.gz .tar.xz)
 
