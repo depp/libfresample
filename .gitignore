@@ -7,6 +7,9 @@
 *.dylib
 *.framework
 /fresample
+/shared
+/static
+/tool
 
 # Archives
 *.gz
