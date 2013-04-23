@@ -33,3 +33,13 @@ Makefile
 *.pbxuser
 project.xcworkspace
 xcuserdata
+
+# Visual C++
+/x64
+/Debug
+/Release
+/ipch
+*.vcxproj.filters
+*.vcxproj.user
+*.suo
+*.sdf
