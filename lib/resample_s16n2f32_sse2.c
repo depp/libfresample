@@ -8,6 +8,9 @@
 #include <string.h>
 #include <math.h>
 
+/* uninitialized local 'u' */
+#pragma warning( disable : 4701 )
+
 #define LOOP_COMBINE \
     x1 = _mm_add_ps(                            \
         _mm_movelh_ps(a[0], a[1]),              \

@@ -30,8 +30,8 @@ lfr_param_name(lfr_param_t pname)
 int
 lfr_param_lookup(const char *pname, size_t len)
 {
-    char tmp[NAMELEN];
-    int i, c;
+    char tmp[NAMELEN], c;
+    int i;
     if (len > NAMELEN)
         return -1;
     for (i = 0; i < (int) len; ++i) {

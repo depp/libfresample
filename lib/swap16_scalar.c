@@ -24,8 +24,8 @@ lfr_swap16_scalar(void *dest, const void *src, size_t count)
         for (i = 0; i < count; ++i) {
             x = s8[i*2+0];
             y = s8[i*2+1];
-            d8[i*2+0] = y;
-            d8[i*2+1] = x;
+            d8[i*2+0] = (unsigned char) y;
+            d8[i*2+1] = (unsigned char) x;
         }
     } else if ((((uintptr_t) dest - (uintptr_t) src) & 3u) != 0) {
         /* 16-bit aligned */
@@ -33,7 +33,7 @@ lfr_swap16_scalar(void *dest, const void *src, size_t count)
         d16 = dest;
         for (i = 0; i < count; ++i) {
             x = s16[i];
-            d16[i] = (x >> 8) | (x << 8);
+            d16[i] = (unsigned short) ((x >> 8) | (x << 8));
         }
     } else {
         /* 16-bit aligned, with 32-bit aligned delta */
@@ -42,7 +42,7 @@ lfr_swap16_scalar(void *dest, const void *src, size_t count)
         n = count;
         if ((uintptr_t) dest & 3u) {
             x = s16[0];
-            d16[0] = (x >> 8) | (x << 8);
+            d16[0] = (unsigned short) ((x >> 8) | (x << 8));
             n -= 1;
             s16 += 1;
             d16 += 1;
@@ -60,7 +60,7 @@ lfr_swap16_scalar(void *dest, const void *src, size_t count)
             s16 = (const unsigned short *) s32;
             d16 = (unsigned short *) d32;
             x = s16[0];
-            d16[0] = (x >> 8) | (x << 8);
+            d16[0] = (unsigned short) ((x >> 8) | (x << 8));
         }
     }
 }

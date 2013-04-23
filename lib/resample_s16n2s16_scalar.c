@@ -60,8 +60,8 @@ lfr_resample_s16n2s16_scalar(
             acc1 = 0x7fff;
         else if (acc1 < -0x8000)
             acc1 = -0x8000;
-        outp[i*2+0] = acc0;
-        outp[i*2+1] = acc1;
+        outp[i*2+0] = (short) acc0;
+        outp[i*2+1] = (short) acc1;
 
         x += inv_ratio;
         ds0 = LCG_A2 * ds0 + LCG_C2;

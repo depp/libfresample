@@ -25,8 +25,8 @@ lfr_info_name(int pname)
 int
 lfr_info_lookup(const char *pname, size_t len)
 {
-    char tmp[NAMELEN];
-    int i, c;
+    char tmp[NAMELEN], c;
+    int i;
     if (len > NAMELEN)
         return -1;
     for (i = 0; i < (int) len; ++i) {

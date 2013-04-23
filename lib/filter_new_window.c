@@ -162,13 +162,13 @@ lfr_filter_new_window(
     switch (type) {
     case LFR_FTYPE_S16:
         lfr_filter_calculate_s16(
-            fp->data, nsamp, nfilt,
+            fp->data, nsamp, (int) nfilt,
             1.0 / (double) (1 << log2nfilt), cutoff, beta);
         break;
 
     case LFR_FTYPE_F32:
         lfr_filter_calculate_f32(
-            fp->data, nsamp, nfilt,
+            fp->data, nsamp, (int) nfilt,
             1.0 / (double) (1 << log2nfilt), cutoff, beta);
         break;
     }

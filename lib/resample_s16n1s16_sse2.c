@@ -6,6 +6,9 @@
 #include "resample.h"
 #include <string.h>
 
+/* uninitialized local 'u' */
+#pragma warning( disable : 4701 )
+
 #define LOOP_FIRCOEFF_SCALAR \
     fn = (((unsigned) x >> 1) >> (31 - log2nfilt)) &            \
         ((1u << log2nfilt) - 1);                                \

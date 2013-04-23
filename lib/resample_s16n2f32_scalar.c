@@ -55,8 +55,8 @@ lfr_resample_s16n2f32_scalar(
             acc0 += inp[(j + off)*2+0] * f;
             acc1 += inp[(j + off)*2+1] * f;
         }
-        acc0 += (float) ds0 * (1.0f / 4294967296.0);
-        acc1 += (float) ds1 * (1.0f / 4294967296.0);
+        acc0 += (float) ds0 * (1.0f / 4294967296.0f);
+        acc1 += (float) ds1 * (1.0f / 4294967296.0f);
         acc0 = floorf(acc0);
         acc1 = floorf(acc1);
         if (acc0 > 0x7fff)
@@ -64,15 +64,15 @@ lfr_resample_s16n2f32_scalar(
         else if (acc0 < -0x8000)
             val0 = -0x8000;
         else
-            val0 = acc0;
+            val0 = (int) acc0;
         if (acc1 > 0x7fff)
             val1 = 0x7fff;
         else if (acc1 < -0x8000)
             val1 = -0x8000;
         else
-            val1 = acc1;
-        outp[i*2+0] = val0;
-        outp[i*2+1] = val1;
+            val1 = (int) acc1;
+        outp[i*2+0] = (short) val0;
+        outp[i*2+1] = (short) val1;
 
         x += inv_ratio;
         ds0 = LCG_A2 * ds0 + LCG_C2;
