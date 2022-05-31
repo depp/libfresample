@@ -1,6 +1,5 @@
-#!/usr/bin/env python
 import os
-from cStringIO import StringIO
+from io import StringIO
 
 ALL_SPECIAL = 'altivec mmx sse sse2 sse3 ssse3 sse4_1 sse4_2'.split()
 

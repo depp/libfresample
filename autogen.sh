@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-python tests/genmake.py --autoconf
-python genmake.py
+python3 tests/genmake.py --autoconf
+python3 genmake.py
 aclocal
 autoconf

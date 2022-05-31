@@ -6,7 +6,7 @@ class TestParamSet(ParamSet):
     RATE_IN = param_rate('RATE_IN', 'input sampling rate', 48000)
     RATE_OUT = param_rate('RATE_OUT', 'output sample rate', 44100)
     QUALITY = param_range(
-        'QUALITY', 'resampler quality setting', range(11), 0, 10)
+        'QUALITY', 'resampler quality setting', list(range(11)), 0, 10)
     NCHAN = param_range('NCHAN', 'number of channels', [1, 2], 1, 2)
     FORMAT = param_format('FORMAT', 'sample format', 's16')
 

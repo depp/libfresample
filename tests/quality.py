@@ -13,7 +13,7 @@ class TestParamSet(ParamSet):
     RATE_IN = param_rate('RATE_IN', 'input sampling rate', 48000)
     RATE_OUT = param_rate('RATE_OUT', 'output sample rate', 44100)
     QUALITY = param_range(
-        'QUALITY', 'resampler quality setting', range(11), 0, 10)
+        'QUALITY', 'resampler quality setting', list(range(11)), 0, 10)
     FORMAT = param_format('FORMAT', 'sample format', 's16')
 
     TEST_BETA = param(
@@ -76,8 +76,8 @@ def test_snr(param, freq):
 
     nbins = NBINS
     fbin = round(freq * len(outdata) / param.RATE_OUT)
-    bin0 = min(max(fbin-nbins/2, 0), len(fft))
-    bin1 = min(max(fbin-nbins/2 + nbins, 0), len(fft))
+    bin0 = min(max(fbin-nbins//2, 0), len(fft))
+    bin1 = min(max(fbin-nbins//2 + nbins, 0), len(fft))
     fft[bin0:bin1] = 0
     noise = numpy.std(fft) / math.sqrt(len(outdata))
     signal = numpy.average(window)

@@ -1,4 +1,4 @@
-from __future__ import with_statement
+
 
 import tempfile
 import math
@@ -233,7 +233,7 @@ class ParamSet(object):
             for param in self.params():
                 items.append((param, getattr(self, param)))
         else:
-            items = self._dict.items()
+            items = list(self._dict.items())
         for k, v in items:
             if v is None:
                 continue
@@ -324,7 +324,7 @@ def param_range(name, doc, default, minv, maxv):
                     last = int(last)
                 else:
                     last = maxv
-                ivals.extend(range(first, last+1))
+                ivals.extend(list(range(first, last+1)))
             else:
                 val = int(val)
                 ivals.append(val)
